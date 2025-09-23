@@ -10,7 +10,7 @@ import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.model.EditSession;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
-import cz.neumimto.towny.townycivs.schedulers.FolliaScheduler;
+import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -43,7 +43,7 @@ public class ManagementService {
     private ConfigurationService configurationService;
 
     @Inject
-    private FolliaScheduler structureScheduler;
+    private FoliaScheduler structureScheduler;
 
     @Inject
     private StructureInventoryService structureInventoryService;

@@ -18,10 +18,9 @@ import org.bukkit.event.Listener;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.*;
-import java.util.logging.Level;
 
 @Singleton
-public class FolliaScheduler implements Runnable, Listener {
+public class FoliaScheduler implements Runnable, Listener {
 
     @Inject
     private ConfigurationService configurationService;

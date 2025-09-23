@@ -11,7 +11,7 @@ import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.Listeners.InventoryListener;
 import cz.neumimto.towny.townycivs.Listeners.TownListener;
 import cz.neumimto.towny.townycivs.mechanics.MechanicService;
-import cz.neumimto.towny.townycivs.schedulers.FolliaScheduler;
+import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -42,7 +42,7 @@ public class TownyCivs extends JavaPlugin {
     @Inject
     public ConfigurationService configurationService;
     @Inject
-    public FolliaScheduler structureScheduler;
+    public FoliaScheduler structureScheduler;
     @Inject
     public StructureService structureService;
     @Inject
@@ -80,7 +80,7 @@ public class TownyCivs extends JavaPlugin {
                 @Override
                 protected void configure() {
                     bind(ConfigurationService.class);
-                    bind(FolliaScheduler.class);
+                    bind(FoliaScheduler.class);
                     bind(StructureService.class);
                     bind(MechanicService.class);
                     bind(ItemService.class);
@@ -127,7 +127,7 @@ public class TownyCivs extends JavaPlugin {
         }
 
         MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
-                injector.getInstance(FolliaScheduler.class),
+                injector.getInstance(FoliaScheduler.class),
                 Duration.ZERO,
                 Duration.of(1, ChronoUnit.SECONDS));
 

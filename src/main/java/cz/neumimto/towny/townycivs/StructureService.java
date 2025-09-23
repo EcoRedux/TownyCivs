@@ -12,7 +12,7 @@ import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
-import cz.neumimto.towny.townycivs.schedulers.FolliaScheduler;
+import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
@@ -38,7 +38,7 @@ public class StructureService {
     private SubclaimService subclaimService;
 
     @Inject
-    private FolliaScheduler structureScheduler;
+    private FoliaScheduler structureScheduler;
 
     @Inject
     private ManagementService managementService;
