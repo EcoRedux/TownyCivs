@@ -1,4 +1,4 @@
-name: Townycivs
+name: TownyCivs
 version: '${version}'
 main: cz.neumimto.towny.townycivs.TownyCivs
 depend: [ Towny ]
