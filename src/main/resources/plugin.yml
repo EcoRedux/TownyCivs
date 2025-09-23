@@ -2,7 +2,7 @@ name: TownyCivs
 version: '${version}'
 main: cz.neumimto.towny.townycivs.TownyCivs
 depend: [ Towny ]
-authors: [ NeumimTo ]
+authors: [ NeumimTo, ItsJules ]
 api-version: 1.19
 folia-supported: true
 libraries:

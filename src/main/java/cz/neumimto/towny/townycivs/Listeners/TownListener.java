@@ -120,7 +120,7 @@ public class TownListener implements Listener {
         Optional<Region> regionOptional = subclaimService.regionAt(location);
         if (regionOptional.isEmpty()) {
             MiniMessage miniMessage = MiniMessage.miniMessage();
-            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>No structure at clicked location</red>"));
+            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>No structure at clicked location</red>"));
             return;
         }
 
@@ -133,7 +133,7 @@ public class TownListener implements Listener {
         WorldCoord worldCoord = WorldCoord.parseWorldCoord(location);
         if (worldCoord.getTownOrNull() != resTown) {
             MiniMessage miniMessage = MiniMessage.miniMessage();
-            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>No structure at clicked location</red>"));
+            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>No structure at clicked location</red>"));
             return;
         }
 
