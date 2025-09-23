@@ -1,4 +1,4 @@
-package cz.neumimto.towny.townycivs.lsitener.TownListener;
+package cz.neumimto.towny.townycivs.Listeners;
 
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.object.Resident;

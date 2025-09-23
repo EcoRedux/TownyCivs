@@ -64,7 +64,7 @@ dependencies {
     implementation 'space.arim.morepaperlib:morepaperlib:0.4.2'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
-    testImplementation 'io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT'
+    compileOnly 'io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT'
     testImplementation 'com.github.seeseemelk:MockBukkit-v1.19:3.1.0'
     // testImplementation 'net.essentialsx:EssentialsX:2.20.0'
     testImplementation 'commons-lang:commons-lang:2.6'
