@@ -1,6 +1,7 @@
 package cz.neumimto.towny.townycivs.Listeners;
 
 import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.TownyMessaging;
 import com.palmergames.bukkit.towny.event.PreNewDayEvent;
 import com.palmergames.bukkit.towny.event.time.dailytaxes.PreTownPaysNationTaxEvent;
 import com.palmergames.bukkit.towny.listeners.TownyPaperEvents;
@@ -16,6 +17,7 @@ import cz.neumimto.towny.townycivs.gui.RegionGui;
 import cz.neumimto.towny.townycivs.model.BlueprintItem;
 import cz.neumimto.towny.townycivs.model.Region;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -177,6 +179,8 @@ public class TownListener implements Listener {
                         managementService.moveTo(player, location);
                     }
                 }
+            }else{
+                TownyMessaging.sendErrorMsg(player, "You can only place blueprints within your town");
             }
         }
     }
