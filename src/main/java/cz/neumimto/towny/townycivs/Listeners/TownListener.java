@@ -17,7 +17,6 @@ import cz.neumimto.towny.townycivs.gui.RegionGui;
 import cz.neumimto.towny.townycivs.model.BlueprintItem;
 import cz.neumimto.towny.townycivs.model.Region;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -122,7 +121,7 @@ public class TownListener implements Listener {
         Optional<Region> regionOptional = subclaimService.regionAt(location);
         if (regionOptional.isEmpty()) {
             MiniMessage miniMessage = MiniMessage.miniMessage();
-            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>No structure at clicked location</red>"));
+            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>No structure at clicked location</red>"));
             return;
         }
 
@@ -135,7 +134,7 @@ public class TownListener implements Listener {
         WorldCoord worldCoord = WorldCoord.parseWorldCoord(location);
         if (worldCoord.getTownOrNull() != resTown) {
             MiniMessage miniMessage = MiniMessage.miniMessage();
-            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>No structure at clicked location</red>"));
+            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>No structure at clicked location</red>"));
             return;
         }
 
@@ -156,24 +155,17 @@ public class TownListener implements Listener {
 
                 if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
                     if (managementService.hasEditSession(player)) {
-                        // Check if the structure can be placed before consuming the blueprint item
-                        if (managementService.canPlaceStructure(player, location, blueprintItem.structure)) {
-                            managementService.endSession(player, location);
+                        managementService.endSession(player, location);
+                        EquipmentSlot hand = event.getHand();
 
-                            // Consume the blueprint item only if the structure can be placed
-                            EquipmentSlot hand = event.getHand();
-                            ItemStack itemInUse = event.getItem();
-                            if (itemInUse.getAmount() > 1) {
-                                itemInUse.setAmount(itemInUse.getAmount() - 1);
-                            } else {
-                                itemInUse = null;
-                            }
-                            player.getInventory().setItem(hand, itemInUse);
+
+                        ItemStack itemInUse = event.getItem();
+                        if (itemInUse.getAmount() > 1) {
+                            itemInUse.setAmount(itemInUse.getAmount() - 1);
                         } else {
-                            // The required blocks check failed, so we end the session without placement
-                            // and without consuming the blueprint item
-                            managementService.endSessionWithoutPlacement(player);
+                            itemInUse = null;
                         }
+                        player.getInventory().setItem(hand, itemInUse);
                     } else {
                         managementService.startNewEditSession(player, blueprintItem.structure, location);
                         managementService.moveTo(player, location);
@@ -186,8 +178,8 @@ public class TownListener implements Listener {
                         managementService.moveTo(player, location);
                     }
                 }
-            } else {
-                TownyMessaging.sendErrorMsg(player, "You can only place blueprints within your town");
+            }else{
+                TownyMessaging.sendErrorMsg(resident, " You can only place structures within your town borders");
             }
         }
     }

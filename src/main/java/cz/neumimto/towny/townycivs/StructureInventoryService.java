@@ -86,27 +86,10 @@ public class StructureInventoryService {
         structsAndPlayers.put(location, player.getUniqueId());
 
         Inventory inv = getStructureInventory(structure, location);
-
-        // Add null check to prevent crash
-        if (inv == null) {
-            TownyCivs.logger.warning("Failed to get inventory for structure at location " + location +
-                " - creating new inventory for structure: " + structure.structureDef.name);
-            inv = createStructureInventory(structure);
-            structure.inventory.put(location, inv);
-        }
-
-        // Make inventory final for lambda
-        final Inventory finalInventory = inv;
-        playersAndInv.put(player.getUniqueId(), new StructAndInv(structure.uuid, finalInventory, location));
+        playersAndInv.put(player.getUniqueId(), new StructAndInv(structure.uuid, inv, location));
 
         TownyCivs.MORE_PAPER_LIB.scheduling().entitySpecificScheduler(player)
-                .run(() -> {
-                    if (finalInventory != null) {
-                        player.openInventory(finalInventory);
-                    } else {
-                        TownyCivs.logger.severe("Inventory is still null, cannot open for player " + player.getName());
-                    }
-                }, null);
+                .run(() -> player.openInventory(inv), null);
     }
 
     public void closeInvenotory(Player player) {
@@ -331,38 +314,6 @@ public class StructureInventoryService {
             }
         }
         return false;
-    }
-
-    /**
-     * Registers a structure with the inventory service
-     * Called when a structure is first created or when its containers are refreshed
-     * @param loadedStructure The structure to register
-     */
-    public void registerStructure(LoadedStructure loadedStructure) {
-        if (loadedStructure.structureDef.inventorySize <= 0) {
-            return; // No inventory to register
-        }
-
-        // Create inventory for the structure if needed
-        Inventory inventory = Bukkit.createInventory(null,
-                loadedStructure.structureDef.inventorySize,
-                Component.text(loadedStructure.structureDef.name + " - Storage"));
-
-        // Add any existing items to the inventory
-        if (loadedStructure.inventory.containsKey(loadedStructure.center)) {
-            Inventory existingInventory = loadedStructure.inventory.get(loadedStructure.center);
-            if (existingInventory != null) {
-                for (ItemStack item : existingInventory.getContents()) {
-                    if (item != null) {
-                        inventory.addItem(item);
-                    }
-                }
-            }
-        }
-
-        // Store the inventory
-        loadedStructure.inventory.put(loadedStructure.center, inventory);
-        TownyCivs.logger.info("Registered inventory for structure: " + loadedStructure.structureDef.name);
     }
 
     private record StructAndInv(UUID structureId, Inventory inventory, Location location) {
