@@ -124,17 +124,17 @@ task dlPlugins {
     download.run {
         src "https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar"
         dest new File(pluginsFileDir, "Vault.jar")
-        overwrite true
+        overwrite false
     }
     download.run {
         src "https://github.com/TheNewEconomy/TNE-Bukkit/releases/download/TNE-0.1.1.16/TNE-0.1.1.16.jar"
         dest new File(pluginsFileDir, "TNE.jar")
-        overwrite true
+        overwrite false
     }
     download.run {
         src "https://github.com/TownyAdvanced/Towny/releases/download/0.99.2.5/towny-0.99.2.5.jar"
         dest new File(pluginsFileDir, "Towny.jar")
-        overwrite true
+        overwrite false
     }
 
     //copy {
