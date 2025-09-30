@@ -156,17 +156,24 @@ public class TownListener implements Listener {
 
                 if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
                     if (managementService.hasEditSession(player)) {
-                        managementService.endSession(player, location);
-                        EquipmentSlot hand = event.getHand();
+                        // Check if the structure can be placed before consuming the blueprint item
+                        if (managementService.canPlaceStructure(player, location, blueprintItem.structure)) {
+                            managementService.endSession(player, location);
 
-
-                        ItemStack itemInUse = event.getItem();
-                        if (itemInUse.getAmount() > 1) {
-                            itemInUse.setAmount(itemInUse.getAmount() - 1);
+                            // Consume the blueprint item only if the structure can be placed
+                            EquipmentSlot hand = event.getHand();
+                            ItemStack itemInUse = event.getItem();
+                            if (itemInUse.getAmount() > 1) {
+                                itemInUse.setAmount(itemInUse.getAmount() - 1);
+                            } else {
+                                itemInUse = null;
+                            }
+                            player.getInventory().setItem(hand, itemInUse);
                         } else {
-                            itemInUse = null;
+                            // The required blocks check failed, so we end the session without placement
+                            // and without consuming the blueprint item
+                            managementService.endSessionWithoutPlacement(player);
                         }
-                        player.getInventory().setItem(hand, itemInUse);
                     } else {
                         managementService.startNewEditSession(player, blueprintItem.structure, location);
                         managementService.moveTo(player, location);
@@ -179,7 +186,7 @@ public class TownListener implements Listener {
                         managementService.moveTo(player, location);
                     }
                 }
-            }else{
+            } else {
                 TownyMessaging.sendErrorMsg(player, "You can only place blueprints within your town");
             }
         }

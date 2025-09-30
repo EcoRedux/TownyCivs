@@ -40,6 +40,18 @@ public class ItemList implements Wrapper {
         @Optional
         public Integer fuel;
 
+        @Path("ConsumeItem")
+        @Optional
+        public Boolean consumeItem;
+
+        @Path("ConsumeAmount")
+        @Optional
+        public Integer consumeAmount;
+
+        @Path("DamageAmount")
+        @Optional
+        public Integer damageAmount;
+
         private ItemStack cache;
 
         public ItemStack toItemStack() {

@@ -1,6 +1,6 @@
-# Townycivs
+# TownyCivs
 
-[![Java CI with Gradle](https://github.com/NeumimTo/Townycivs/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/NeumimTo/Townycivs/actions/workflows/gradle.yml)
+[![Java CI with Gradle](https://github.com/NeumimTo/TownyCivs/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/NeumimTo/TownyCivs/actions/workflows/gradle.yml)
 
 Towny addon that adds automated farms, factories and administrative buildings into towny town & nation system
 
@@ -20,7 +20,7 @@ Everything is configurable - you can (and you should) create your own blueprints
 For documentation check wiki
 
  - Region processing is done in an asychronous thread
- - Unlike civs Townycivs wont load any addition chunks when distributing region production
+ - Unlike civs TownyCivs wont load any addition chunks when distributing region production
 
 **Alphabuilds are not suitable for production env.**
 

@@ -215,5 +215,23 @@ public class ConfigurationService {
         return line.replaceFirst(s, tocoLoreBannedBiomes);
     }
 
+    /**
+     * Reloads all structure configurations from disk
+     * This will update area dimensions and other properties
+     *
+     * @param path The plugin data folder path
+     * @throws IOException if there's an error loading the configurations
+     */
+    public void reloadStructures(Path path) throws IOException {
+        // Clear existing structure data
+        structures.clear();
+        blueprintItems.clear();
+
+        // Reload settings and structures
+        load(path);
+
+        TownyCivs.logger.info("Structure configurations reloaded");
+    }
+
 
 }

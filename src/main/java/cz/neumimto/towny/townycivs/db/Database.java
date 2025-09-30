@@ -67,7 +67,7 @@ public final class Database implements IStorage {
         prefix = TownySettings.getSQLTablePrefix().toUpperCase();
         TownyDataSource dataSource = TownyAPI.getInstance().getDataSource();
         if (!(dataSource instanceof TownySQLSource)) {
-            TownyCivs.logger.log(Level.SEVERE, "Townycivs require towny to use SQL database, if you want a flatfile support feel free to make a pr");
+            TownyCivs.logger.log(Level.SEVERE, "TownyCivs require towny to use SQL database, if you want a flatfile support feel free to make a pr");
             return;
         }
 

@@ -128,7 +128,9 @@ public class ManagementService {
             EditSession editSession = editSessions.get(player.getUniqueId());
             editSession.center = location;
             if (moveTo(player, editSession.center)) {
-                placeBlueprint(player, editSession.center, editSession.structure);
+                // Skip validation here since it was already done in canPlaceStructure()
+                // before the blueprint item was consumed
+                placeBlueprintWithoutValidation(player, editSession.center, editSession.structure);
                 editSessions.remove(player.getUniqueId());
             }
         }
@@ -152,14 +154,15 @@ public class ManagementService {
     }
 
     public Set<Location> prepareVisualBox(Player player, Location location, Structure.Area area) {
+        // Calculate bounds without the extra -1 that was making the visual box too large
         double maxX = location.getX() + area.x;
-        double minX = location.getX() - area.x - 1;
+        double minX = location.getX() - area.x; // Removed the -1 here
 
-        double maxY = location.getY() + area.y;
-        double minY = location.getY() - area.y - 1;
+        double maxY = (location.getY() - 1) + area.y;
+        double minY = (location.getY() - 1) - area.y; // Removed the -1 here
 
         double maxZ = location.getZ() + area.z;
-        double minZ = location.getZ() - area.z - 1;
+        double minZ = location.getZ() - area.z; // Removed the -1 here;
 
         World world = location.getWorld();
 
@@ -200,8 +203,39 @@ public class ManagementService {
 
         Location center = new Location(player.getWorld(), location.getX(), location.getY(), location.getZ());
 
+        // Create a temporary structure and region to check for required blocks
+        LoadedStructure tempStructure = new LoadedStructure(UUID.randomUUID(), town.getUUID(), structure.id, center, structure);
+        Region tempRegion = subclaimService.createRegion(tempStructure).get();
+
+        // Check if the required blocks are present
+        Map<String, Integer> remainingBlocks = subclaimService.remainingBlocks(tempRegion);
+        if (!subclaimService.noRemainingBlocks(remainingBlocks, tempStructure)) {
+            MiniMessage miniMessage = MiniMessage.miniMessage();
+            Component c = miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>Cannot place structure - missing required blocks!</red>");
+            player.sendMessage(c);
+
+            // Show the player what blocks are missing
+            showMissingBlocks(player, remainingBlocks);
+
+            // Clean up temporary structure visual elements
+            if (editSessions.containsKey(player.getUniqueId())) {
+                EditSession session = editSessions.get(player.getUniqueId());
+                if (session.currentStructureBorder != null) {
+                    removeAreaBorder(player, session.currentStructureBorder);
+                }
+                if (session.overlappintStructureBorder != null) {
+                    removeAreaBorder(player, session.overlappintStructureBorder);
+                }
+                editSessions.remove(player.getUniqueId());
+            }
+            return;
+        }
+
+        // If we reach here, all blocks are present, so create the structure
         LoadedStructure loadedStructure = new LoadedStructure(UUID.randomUUID(), town.getUUID(), structure.id, center, structure);
-        loadedStructure.editMode.set(true);
+
+        // No need for edit mode since blocks are already present
+        loadedStructure.editMode.set(false);
 
         Region lreg = subclaimService.createRegion(loadedStructure).get();
 
@@ -214,26 +248,62 @@ public class ManagementService {
         Storage.scheduleSave(loadedStructure);
     }
 
-    private void refreshContainerLocations(LoadedStructure loadedStructure, Region lreg) {
-        Collection<Material> materials = Materials.getMaterials("tc:container");
+    /**
+     * Shows a list of missing blocks to the player
+     *
+     * @param player          The player to show the message to
+     * @param remainingBlocks Map of block types and counts needed
+     */
+    private void showMissingBlocks(Player player, Map<String, Integer> remainingBlocks) {
+        MiniMessage miniMessage = MiniMessage.miniMessage();
+        player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <yellow>The following blocks are required:</yellow>"));
 
-        Collection<Block> map = subclaimService.blocksWithinRegion(materials, lreg);
-        Map<Location, Inventory> newLocs = new HashMap<>();
-        for (Block block : map) {
-            if (materials.contains(block.getType())) {
-                newLocs.put(block.getLocation(), loadedStructure.inventory.get(block.getLocation()));
+        for (Map.Entry<String, Integer> entry : remainingBlocks.entrySet()) {
+            if (!entry.getKey().startsWith("!") && entry.getValue() > 0) {
+                // Regular block requirement
+                player.sendMessage(miniMessage.deserialize("<yellow>• " + formatBlockName(entry.getKey()) + ": " + entry.getValue() + "</yellow>"));
+            } else if (entry.getKey().startsWith("!") && entry.getValue() != 0) {
+                // Negative requirement (blocks that must not be present)
+                player.sendMessage(miniMessage.deserialize("<yellow>• " + formatBlockName(entry.getKey().substring(1)) + ": None allowed (remove " + Math.abs(entry.getValue()) + ")</yellow>"));
+            }
+        }
+    }
+
+    /**
+     * Formats a block name for display to players
+     *
+     * @param blockKey The block key (minecraft:block or tag)
+     * @return Formatted block name
+     */
+    private String formatBlockName(String blockKey) {
+        if (blockKey.contains(":")) {
+            String[] parts = blockKey.split(":");
+            if (parts.length > 1) {
+                return capitalizeWords(parts[1].replace("_", " "));
+            }
+        }
+        return capitalizeWords(blockKey.replace("_", " "));
+    }
+
+    /**
+     * Capitalizes the first letter of each word
+     *
+     * @param str The string to capitalize
+     * @return Capitalized string
+     */
+    private String capitalizeWords(String str) {
+        String[] words = str.split("\\s");
+        StringBuilder result = new StringBuilder();
+
+        for (String word : words) {
+            if (word.length() > 0) {
+                result.append(Character.toUpperCase(word.charAt(0)))
+                        .append(word.substring(1).toLowerCase())
+                        .append(" ");
             }
         }
 
-        loadedStructure.inventory.clear();
-
-        Iterator<Map.Entry<Location, Inventory>> iterator = newLocs.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Location, Inventory> next = iterator.next();
-            loadedStructure.inventory.put(next.getKey(),
-                    next.getValue() == null ? structureInventoryService.loadStructureInventory(loadedStructure, next.getKey(), new ItemStack[0]) : next.getValue());
-        }
-
+        return result.toString().trim();
     }
 
     public void toggleEditMode(LoadedStructure loadedStructure, Player player) {
@@ -282,5 +352,124 @@ public class ManagementService {
             map.put(location, data);
         }
         player.sendMultiBlockChange(map, false);
+    }
+
+    /**
+     * Refreshes container locations for a structure
+     * Finds and registers container blocks (like chests) within the structure's region
+     *
+     * @param loadedStructure The structure to refresh containers for
+     * @param region          The region containing the structure
+     */
+    private void refreshContainerLocations(LoadedStructure loadedStructure, Region region) {
+        // Get all potential container blocks
+        Set<Material> containerTypes = new HashSet<>();
+        containerTypes.add(Material.CHEST);
+        containerTypes.add(Material.TRAPPED_CHEST);
+        containerTypes.add(Material.BARREL);
+        containerTypes.add(Material.HOPPER);
+        containerTypes.add(Material.DISPENSER);
+        containerTypes.add(Material.DROPPER);
+        containerTypes.add(Material.FURNACE);
+        containerTypes.add(Material.BLAST_FURNACE);
+        containerTypes.add(Material.SMOKER);
+        containerTypes.add(Material.BREWING_STAND);
+
+        // Find all container blocks within the region
+        Collection<Block> containerBlocks = subclaimService.blocksWithinRegion(containerTypes, region);
+
+        // Register containers with the structure
+        loadedStructure.containerLocations.clear();
+        for (Block block : containerBlocks) {
+            loadedStructure.containerLocations.add(block.getLocation());
+        }
+
+        // If structure has an inventory system, initialize it
+        if (loadedStructure.structureDef.inventorySize > 0) {
+            structureInventoryService.registerStructure(loadedStructure);
+        }
+    }
+
+    /**
+     * Checks if a structure can be placed at the given location
+     * This method should be called before consuming the blueprint item
+     *
+     * @param player   The player placing the structure
+     * @param location The location to check
+     * @param structure The structure definition
+     * @return true if the structure can be placed, false otherwise
+     */
+    public boolean canPlaceStructure(Player player, Location location, Structure structure) {
+        Town town = TownyAPI.getInstance().getResident(player).getTownOrNull();
+
+        if (town == null) {
+            MiniMessage miniMessage = MiniMessage.miniMessage();
+            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>You must be in a town to place structures!</red>"));
+            return false;
+        }
+
+        Location center = new Location(player.getWorld(), location.getX(), location.getY(), location.getZ());
+
+        // Create a temporary structure and region to check for required blocks
+        LoadedStructure tempStructure = new LoadedStructure(UUID.randomUUID(), town.getUUID(), structure.id, center, structure);
+        Region tempRegion = subclaimService.createRegion(tempStructure).get();
+
+        // Check for overlapping structures
+        Optional<Region> overlaps = subclaimService.overlaps(tempRegion);
+        if (overlaps.isPresent()) {
+            Region region1 = overlaps.get();
+            Structure overlapingStruct = configurationService.findStructureById(region1.structureId).get();
+            MiniMessage miniMessage = MiniMessage.miniMessage();
+            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>" + structure.name + " region overlaps with " + overlapingStruct.name + "</red>"));
+            return false;
+        }
+
+        // Check if structure is within town boundaries
+        if (subclaimService.isOutsideTownClaim(tempRegion, town)) {
+            MiniMessage miniMessage = MiniMessage.miniMessage();
+            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>" + structure.name + " is outside town claim</red>"));
+            return false;
+        }
+
+        // Check if the required blocks are present
+        Map<String, Integer> remainingBlocks = subclaimService.remainingBlocks(tempRegion);
+        if (!subclaimService.noRemainingBlocks(remainingBlocks, tempStructure)) {
+            MiniMessage miniMessage = MiniMessage.miniMessage();
+            Component c = miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>Cannot place structure - missing required blocks!</red>");
+            player.sendMessage(c);
+
+            // Show the player what blocks are missing
+            showMissingBlocks(player, remainingBlocks);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Places a blueprint without doing validation (validation should have been done already)
+     * This method is used after canPlaceStructure() has already validated everything
+     *
+     * @param player    The player placing the structure
+     * @param location  The location to place at
+     * @param structure The structure to place
+     */
+    private void placeBlueprintWithoutValidation(Player player, Location location, Structure structure) {
+        Town town = TownyAPI.getInstance().getResident(player).getTownOrNull();
+        Location center = new Location(player.getWorld(), location.getX(), location.getY(), location.getZ());
+
+        // Create the structure without validation since it was already done
+        LoadedStructure loadedStructure = new LoadedStructure(UUID.randomUUID(), town.getUUID(), structure.id, center, structure);
+        loadedStructure.editMode.set(false);
+
+        Region lreg = subclaimService.createRegion(loadedStructure).get();
+
+        refreshContainerLocations(loadedStructure, lreg);
+        subclaimService.registerRegion(lreg, loadedStructure);
+
+        structureService.addToTown(town, loadedStructure);
+
+        TownyMessaging.sendPrefixedTownMessage(town, player.getName() + " placed " + structure.name + " at " + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ());
+        Storage.scheduleSave(loadedStructure);
     }
 }

@@ -6,7 +6,9 @@ import org.bukkit.inventory.Inventory;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -27,6 +29,7 @@ public class LoadedStructure {
     public transient int unsavedTickCount;
     public long lastTickTime;
     public transient long nextTickTime;
+    public final Set<Location> containerLocations = new HashSet<>();
 
     public LoadedStructure(UUID uuid, UUID town, String structureId, Location center, Structure structureDef) {
         this.uuid = uuid;

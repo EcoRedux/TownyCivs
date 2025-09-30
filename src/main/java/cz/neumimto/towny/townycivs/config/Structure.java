@@ -165,16 +165,37 @@ public class Structure {
     public static class AreaConversion implements Converter<Area, String> {
         @Override
         public Area convertToField(String value) {
-            String[] a = value.split("x");
-            return new Area(Integer.parseInt(a[0]), Integer.parseInt(a[1]), Integer.parseInt(a[2]));
+            // Check if this is using the new exact dimensions format (e.g. "e3x3x3")
+            if (value.startsWith("e") && value.length() > 1 && Character.isDigit(value.charAt(1))) {
+                String[] a = value.substring(1).split("x");
+                int width = Integer.parseInt(a[0]);
+                int depth = Integer.parseInt(a[1]);
+                int height = Integer.parseInt(a[2]);
+
+                // Calculate radius values that will result in the exact dimensions
+                // BoundingBox extends in both directions, so we need to calculate the radius
+                // that will give us the exact dimensions we want
+                int radiusX = Math.max(1, width / 2);
+                int radiusZ = Math.max(1, depth / 2);
+                int radiusY = Math.max(1, height / 2);
+
+                System.out.println("Requested dimensions: " + width + "x" + depth + "x" + height);
+                System.out.println("Using radius values: " + radiusX + "x" + radiusZ + "x" + radiusY);
+                System.out.println("Expected total size: " + (radiusX * 2 + 1) + "x" + (radiusZ * 2 + 1) + "x" + (radiusY * 2 + 1));
+                return new Area(radiusX, radiusY, radiusZ);
+
+            } else {
+                // Original radius-based format (e.g. "1x1x1")
+                String[] a = value.split("x");
+                return new Area(Integer.parseInt(a[0]), Integer.parseInt(a[1]), Integer.parseInt(a[2]));
+            }
         }
 
         @Override
-        public String convertFromField(Area value) {
-            return null;
+        public String convertFromField(Area area) {
+            return "";
         }
     }
-
     public static class Blocks implements Converter<Map, Config> {
 
         @Override
@@ -210,4 +231,3 @@ public class Structure {
     }
 
 }
-

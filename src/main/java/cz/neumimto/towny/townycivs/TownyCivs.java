@@ -6,6 +6,7 @@ import com.google.inject.Guice;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.palmergames.bukkit.towny.TownyAPI;
+import cz.neumimto.towny.townycivs.commands.AdminCommands;
 import cz.neumimto.towny.townycivs.commands.StructureCommands;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.Listeners.InventoryListener;
@@ -73,7 +74,7 @@ public class TownyCivs extends JavaPlugin {
                 /_/  \\____/|__/|__/_/ /_/\\__, /\\____/\\____/_/\\____/_/ /_/_/\\___/____/ \s
                                         /____/                                        \s
                 """);
-        getLogger().info("Townycivs starting");
+        getLogger().info("TownyCivs starting");
 
         if (!reloading) {
             injector = Guice.createInjector(new AbstractModule() {
@@ -103,6 +104,7 @@ public class TownyCivs extends JavaPlugin {
         if (!reloading) {
             PaperCommandManager manager = new PaperCommandManager(this);
             manager.registerCommand(injector.getInstance(StructureCommands.class));
+            manager.registerCommand(injector.getInstance(AdminCommands.class));
 
             Map<String, Map<String, String>> translations = new HashMap<>();
             try (var is = getClass().getClassLoader().getResourceAsStream("lang/en-US.properties")) {
@@ -133,12 +135,12 @@ public class TownyCivs extends JavaPlugin {
 
 
         reloading = true;
-        getLogger().info("Townycivs started");
+        getLogger().info("TownyCivs started");
     }
 
 
     @Override
     public void onDisable() {
-        getLogger().info("Townycivs disabled");
+        getLogger().info("TownyCivs disabled");
     }
 }

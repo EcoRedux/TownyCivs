@@ -17,7 +17,7 @@ public class MainMenuGui extends TCGui {
 
     @Override
     protected String getTitle(CommandSender commandSender, GuiConfig guiConfig, String param) {
-        return "Townycivs";
+        return "TownyCivs";
     }
 
     public void display(Player player, String townName) {

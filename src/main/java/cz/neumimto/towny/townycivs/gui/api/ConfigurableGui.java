@@ -7,6 +7,7 @@ import com.electronwill.nightconfig.hocon.HoconParser;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.PatternPane;
 import com.github.stefvanschie.inventoryframework.pane.util.Pattern;
+import cz.neumimto.towny.townycivs.TownyCivs;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
@@ -60,16 +61,45 @@ public abstract class ConfigurableGui {
     private void reloadGuiConfig(Path path) {
         if (!Files.exists(path)) {
             String assetAsString = getAssetAsString("gui/" + fileName);
+            TownyCivs.logger.info("Creating GUI config file: " + path.toString());
 
-            HoconParser hoconParser = new HoconParser();
-            try (StringReader stringReader = new StringReader(assetAsString)) {
-                CommentedConfig parsed = hoconParser.parse(stringReader);
-                guiConfig = new ObjectConverter().toObject(parsed, GuiConfig::new);
+            try {
+                // Ensure parent directory exists
+                Path parentDir = path.getParent();
+                if (parentDir != null && !Files.exists(parentDir)) {
+                    TownyCivs.logger.info("Creating directory: " + parentDir);
+                    Files.createDirectories(parentDir);
+                }
+
+                // Write the default config from jar to the file system
+                TownyCivs.logger.info("Writing config to: " + path);
+                Files.writeString(path, assetAsString);
+                TownyCivs.logger.info("Successfully wrote config file");
+
+                // Now load from the newly created file
+                try (FileConfig fileConfig = FileConfig.of(path)) {
+                    fileConfig.load();
+                    guiConfig = new ObjectConverter().toObject(fileConfig, GuiConfig::new);
+                    TownyCivs.logger.info("Loaded config from file: " + path);
+                }
+            } catch (IOException e) {
+                // Log the error for debugging
+                TownyCivs.logger.severe("Failed to create GUI config file: " + e.getMessage());
+                e.printStackTrace();
+
+                // Fallback to loading from jar if writing fails
+                TownyCivs.logger.info("Falling back to loading from JAR");
+                HoconParser hoconParser = new HoconParser();
+                try (StringReader stringReader = new StringReader(assetAsString)) {
+                    CommentedConfig parsed = hoconParser.parse(stringReader);
+                    guiConfig = new ObjectConverter().toObject(parsed, GuiConfig::new);
+                }
             }
         } else {
             try (FileConfig fileConfig = FileConfig.of(path)) {
                 fileConfig.load();
                 guiConfig = new ObjectConverter().toObject(fileConfig, GuiConfig::new);
+                TownyCivs.logger.info("Loaded existing GUI config: " + path);
             }
         }
     }
