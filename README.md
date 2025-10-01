@@ -32,6 +32,7 @@ Tested on:
 
 - Paper 1.21.7
 - Towny 0.101.2.0
+- DecentHolograms
 
 ## Building from source
 
