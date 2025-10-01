@@ -24,7 +24,8 @@ public class ItemService {
         ItemStack itemStack = new ItemStack(Material.ENCHANTED_BOOK);
         itemStack.editMeta(meta -> {
             meta.setCustomModelData(3077);
-            meta.displayName(Component.text("Town administration"));
+            meta.displayName(Component.text("Town Administration"));
+            meta.setEnchantmentGlintOverride(true);
         });
         return itemStack;
     }
@@ -34,6 +35,7 @@ public class ItemService {
         itemStack.editMeta(meta -> {
             meta.setCustomModelData(3078);
             meta.displayName(Component.text("Structure Edit Tool"));
+            meta.setEnchantmentGlintOverride(true);
         });
         return itemStack;
     }
