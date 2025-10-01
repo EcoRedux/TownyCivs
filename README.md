@@ -2,9 +2,9 @@
 
 [![Java CI with Gradle](https://github.com/NeumimTo/TownyCivs/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/NeumimTo/TownyCivs/actions/workflows/gradle.yml)
 
-Towny addon that adds automated farms, factories and administrative buildings into towny town & nation system
+Towny addon that adds automated farms, factories and administrative buildings into Towny Ecosystem
 
-The plugin has been inspired by the mod minecolonies and plugin civs (hence its name) 
+The plugin has been inspired by the mod [MineColonies](https://www.curseforge.com/minecraft/mc-mods/minecolonies) and plugin [Civs](https://www.spigotmc.org/resources/civs.67350/) (hence its name) 
 
 Basic gameplay:
 
@@ -20,18 +20,18 @@ Everything is configurable - you can (and you should) create your own blueprints
 For documentation check wiki
 
  - Region processing is done in an asychronous thread
- - Unlike civs TownyCivs wont load any addition chunks when distributing region production
+ - Unlike Civs TownyCivs wont load any addition chunks when distributing region production
 
 **Alphabuilds are not suitable for production env.**
 
-For any questions ping NeumimTo at the towny discord
+For any questions ping ItsJules at the towny discord
 
 ## Requirements ##
 
 Tested on:
 
-- folia & paper 1.19.4  (might work on 1.17/1.18, wont work with anything below 1.16)
-- towny 0.98.1.0 (might or might not work with older versions)
+- Paper 1.21.7
+- Towny 0.101.2.0
 
 ## Building from source
 
