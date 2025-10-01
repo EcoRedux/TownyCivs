@@ -11,6 +11,7 @@ import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
+import eu.decentsoftware.holograms.api.DHAPI;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
@@ -77,6 +78,24 @@ public class FoliaScheduler implements Runnable, Listener {
             if (!m.mechanic.check(ctx, m.configValue)) {
                     org.bukkit.Location structureLocation = structure.inventory.keySet().iterator().next();
                     Sound anvilSound = Sound.sound(Key.key("minecraft:block.anvil.land"), Sound.Source.BLOCK, 1.0f, 0.5f);
+
+                    // Create a unique hologram ID based on structure location
+                    String hologramId = "Missing_Requirements_" + structure.structureId;
+
+                    // Create a centered location for the hologram (middle of the block)
+                    org.bukkit.Location centeredLocation = structure.center.clone();
+                    centeredLocation.add(0.5, 0, 0.5); // Center X/Z and position above the block
+
+                    // Create the hologram
+                    DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
+
+                    // Schedule hologram removal after 5 seconds
+                    TownyCivs.MORE_PAPER_LIB.scheduling().asyncScheduler().runDelayed(() -> {
+                        if (DHAPI.getHologram(hologramId) != null) {
+                            DHAPI.removeHologram(hologramId);
+                        }
+                    }, java.time.Duration.ofSeconds(10)); // 5 seconds duration
+
                     Storage.scheduleSave(structure);
 
                     for (Player player : structureLocation.getWorld().getPlayers()) {
