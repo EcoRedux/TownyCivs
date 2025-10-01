@@ -4,6 +4,7 @@ import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.Town;
 import cz.neumimto.towny.townycivs.*;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
@@ -11,11 +12,14 @@ import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.gui.api.GuiCommand;
 import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
+import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -114,6 +118,18 @@ public class RegionGui extends TCGui {
             itemMeta.displayName(mm.deserialize("<red>Delete</red>"));
         });
         map.put("Delete", List.of(new GuiCommand(delete, e -> {
+            Set<Location> locations = managementService.prepareVisualBox((Player) e.getWhoClicked(), region.loadedStructure.center, region.loadedStructure.structureDef.area);
+            Set<Location> center = Collections.singleton(region.loadedStructure.center);
+
+            for (Location loc : locations) {
+                Block block = loc.getBlock();
+                player.sendBlockChange(loc, block.getBlockData());
+            }
+
+            for (Location loc : center) {
+                Block block = loc.getBlock();
+                player.sendBlockChange(loc, block.getBlockData());
+            }
             structureService.delete(region, (Player) e.getWhoClicked());
             e.setCancelled(true);
             player.getOpenInventory().close();

@@ -51,7 +51,7 @@ test {
 
 dependencies {
     compileOnly 'dev.folia:folia-api:1.19.4-R0.1-SNAPSHOT'
-    compileOnly 'com.palmergames.bukkit.towny:towny:0.99.2.5'
+    compileOnly 'com.palmergames.bukkit.towny:towny:0.101.2.0'
     compileOnly 'com.electronwill.night-config:hocon:3.6.5'
     compileOnly 'com.google.inject:guice:5.1.0'
 

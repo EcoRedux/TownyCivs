@@ -51,7 +51,7 @@ public class TownService implements Listener {
 
     public int getTownPointsMax(Town town) {
         Map<Integer, Integer> townpoints = configurationService.config.townpoints;
-        int level = town.getLevel();
+        int level = town.getLevelNumber();
         Integer integer = townpoints.get(level);
         return integer == null ? 0 : integer;
     }

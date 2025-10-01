@@ -132,7 +132,6 @@ public final class Database implements IStorage {
         try {
             TownyCivs.logger.info("Saving structure " + structure.uuid);
             String sql = save_sql;
-            ((TownySQLSource) TownyAPI.getInstance().getDataSource()).getContext();
             Connection connection = ((TownySQLSource) TownyAPI.getInstance().getDataSource()).getHikariDataSource().getConnection();
             try (var stmt = connection.prepareStatement(sql)) {
                 stmt.setString(1, structure.uuid.toString()); //"structure_uuid"
@@ -154,7 +153,6 @@ public final class Database implements IStorage {
         try {
             TownyCivs.logger.info("Removing Structure " + uuid);
             String sql = queryFromFile("townycivs_delete.sql");
-            ((TownySQLSource) TownyAPI.getInstance().getDataSource()).getContext();
             Connection connection = ((TownySQLSource) TownyAPI.getInstance().getDataSource()).getHikariDataSource().getConnection();
             try (var stmt = connection.prepareStatement(sql)) {
                 stmt.setString(1, uuid.toString());
