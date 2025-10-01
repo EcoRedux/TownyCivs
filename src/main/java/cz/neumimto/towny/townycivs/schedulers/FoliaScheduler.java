@@ -87,14 +87,16 @@ public class FoliaScheduler implements Runnable, Listener {
                     centeredLocation.add(0.5, 0, 0.5); // Center X/Z and position above the block
 
                     // Create the hologram
-                    DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
 
                     // Schedule hologram removal after 5 seconds
                     TownyCivs.MORE_PAPER_LIB.scheduling().asyncScheduler().runDelayed(() -> {
                         if (DHAPI.getHologram(hologramId) != null) {
                             DHAPI.removeHologram(hologramId);
+                        }else{
+                            DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
                         }
                     }, java.time.Duration.ofSeconds(10)); // 5 seconds duration
+
 
                     Storage.scheduleSave(structure);
 
