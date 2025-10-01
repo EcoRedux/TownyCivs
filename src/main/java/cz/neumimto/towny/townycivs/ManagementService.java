@@ -7,9 +7,7 @@ import com.palmergames.bukkit.towny.object.Translatable;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.db.Storage;
-import cz.neumimto.towny.townycivs.model.EditSession;
-import cz.neumimto.towny.townycivs.model.LoadedStructure;
-import cz.neumimto.towny.townycivs.model.Region;
+import cz.neumimto.towny.townycivs.model.*;
 import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -32,7 +30,7 @@ import java.util.*;
 public class ManagementService {
 
     Set<UUID> structuresBeingEdited = new HashSet<>();
-    private Map<UUID, EditSession> editSessions = new HashMap<>();
+    private Map<PlayerBlueprintKey, EditSession> editSessions = new HashMap<>();
     @Inject
     private StructureService structureService;
 
@@ -51,18 +49,34 @@ public class ManagementService {
     @Inject
     private TownService townService;
 
-    public EditSession startNewEditSession(Player player, Structure structure, Location location) {
-        var es = new EditSession(structure, location);
+    public EditSession startNewEditSession(Player player, Structure structure, Location location, BlueprintItem item) {
+        Iterator<Map.Entry<PlayerBlueprintKey, EditSession>> it = editSessions.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<PlayerBlueprintKey, EditSession> entry = it.next();
+            if (entry.getKey().getPlayerId().equals(player.getUniqueId())) {
+                EditSession old = entry.getValue();
+                if (old.currentStructureBorder != null) {
+                    removeAreaBorder(player, old.currentStructureBorder);
+                }
+                if (old.overlappintStructureBorder != null) {
+                    removeAreaBorder(player, old.overlappintStructureBorder);
+                }
+                it.remove(); // actually remove old session
+            }
+        }
+
+
+        var es = new EditSession(structure, location, item);
         es.structure = structure;
-        editSessions.put(player.getUniqueId(), es);
+        editSessions.put(new PlayerBlueprintKey(player.getUniqueId(), item), es);
         MiniMessage miniMessage = MiniMessage.miniMessage();
         player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <green>Right click again to change blueprint location, Left click to confirm selection and place blueprint</green>"));
         return es;
     }
 
-    public boolean moveTo(Player player, Location location) {
-        if (editSessions.containsKey(player.getUniqueId())) {
-            EditSession editSession = editSessions.get(player.getUniqueId());
+    public boolean moveTo(Player player, Location location, BlueprintItem item) {
+        if (editSessions.containsKey(new PlayerBlueprintKey(player.getUniqueId(), item))) {
+            EditSession editSession = editSessions.get(new PlayerBlueprintKey(player.getUniqueId(), item));
             editSession.center = location.clone().add(0, editSession.structure.area.y + 1, 0);
             Region region = subclaimService.createRegion(editSession.structure, editSession.center);
 
@@ -81,7 +95,7 @@ public class ManagementService {
                 Region region1 = overlaps.get();
                 Structure overlapingStruct = configurationService.findStructureById(region1.structureId).get();
                 MiniMessage miniMessage = MiniMessage.miniMessage();
-                player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>" + editSession.structure.name + " region overlaps with " + overlapingStruct.name + "</red>"));
+                player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>" + editSession.structure.name + " region overlaps with " + overlapingStruct.name + "</red>"));
                 isOk = false;
 
                 if (editSession.overlappintStructureBorder != null) {
@@ -99,7 +113,7 @@ public class ManagementService {
             Town town = TownyAPI.getInstance().getResident(player).getTownOrNull();
             if (subclaimService.isOutsideTownClaim(region, town)) {
                 MiniMessage miniMessage = MiniMessage.miniMessage();
-                player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>" + editSession.structure.name + " is outside town claim" + "</red>"));
+                player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>" + editSession.structure.name + " is outside town claim" + "</red>"));
                 isOk = false;
             }
 
@@ -111,8 +125,8 @@ public class ManagementService {
         return false;
     }
 
-    public void endSessionWithoutPlacement(Player player) {
-        EditSession remove = editSessions.remove(player.getUniqueId());
+    public void endSessionWithoutPlacement(Player player, BlueprintItem item) {
+        EditSession remove = editSessions.remove(new PlayerBlueprintKey(player.getUniqueId(), item));
         if (remove != null) {
             if (remove.overlappintStructureBorder != null) {
                 removeAreaBorder(player, remove.overlappintStructureBorder);
@@ -123,23 +137,26 @@ public class ManagementService {
         }
     }
 
-    public void endSession(Player player, Location location) {
-        if (editSessions.containsKey(player.getUniqueId())) {
-            EditSession editSession = editSessions.get(player.getUniqueId());
+    public void endSession(Player player, Location location, BlueprintItem item) {
+        if (editSessions.containsKey(new PlayerBlueprintKey(player.getUniqueId(), item))) {
+            EditSession editSession = editSessions.get(new PlayerBlueprintKey(player.getUniqueId(), item));
             editSession.center = location;
-            if (moveTo(player, editSession.center)) {
+            if (moveTo(player, editSession.center, item)) {
                 placeBlueprint(player, editSession.center, editSession.structure);
-                editSessions.remove(player.getUniqueId());
+                if (editSession.currentStructureBorder != null) {
+                    removeAreaBorder(player, editSession.currentStructureBorder);
+                }
+                editSessions.remove(new PlayerBlueprintKey(player.getUniqueId(), item));
             }
         }
     }
 
-    public boolean hasEditSession(Player player) {
-        return editSessions.containsKey(player.getUniqueId()) && editSessions.get(player.getUniqueId()).structure != null;
+    public boolean hasEditSession(Player player, BlueprintItem item) {
+        return editSessions.containsKey(new PlayerBlueprintKey(player.getUniqueId(), item)) && editSessions.get(new PlayerBlueprintKey(player.getUniqueId(), item)).structure != null;
     }
 
-    public EditSession getSession(Player player) {
-        return editSessions.get(player.getUniqueId());
+    public EditSession getSession(Player player, BlueprintItem item) {
+        return editSessions.get(new PlayerBlueprintKey(player.getUniqueId(), item));
     }
 
     public void removeAreaBorder(Player player, Set<Location> locs) {
@@ -275,7 +292,7 @@ public class ManagementService {
         return structuresBeingEdited.contains(loadedStructure.uuid);
     }
 
-    private void sendBlockChange(Player player, Set<Location> locations, Material mat) {
+    public void sendBlockChange(Player player, Set<Location> locations, Material mat) {
         BlockData data = mat.createBlockData();
         Map<Location, BlockData> map = new HashMap<>();
         for (Location location : locations) {

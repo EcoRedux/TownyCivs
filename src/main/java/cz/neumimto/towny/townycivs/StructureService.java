@@ -18,6 +18,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.util.BoundingBox;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -189,6 +190,20 @@ public class StructureService {
         TownyMessaging.sendPrefixedTownMessage(town, player.getName() + " deleted structure " + l.structureDef.name);
 
         Storage.scheduleRemove(l);
+    }
+
+    public Optional<BoundingBox> getStructureBoundingBox(UUID structureUUID) {
+        Optional<LoadedStructure> structure = findStructureByUUID(structureUUID);
+        if (structure.isPresent()) {
+            Region region = subclaimService.getRegion(structure.get());
+            return region != null ? Optional.of(region.boundingBox) : Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    public Optional<BoundingBox> getStructureBoundingBox(LoadedStructure loadedStructure) {
+        Region region = subclaimService.getRegion(loadedStructure);
+        return region != null ? Optional.of(region.boundingBox) : Optional.empty();
     }
 
     public Optional<LoadedStructure> findStructureByUUID(UUID uuid) {

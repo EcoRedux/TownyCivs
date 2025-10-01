@@ -15,10 +15,12 @@ public class EditSession {
     public Location center;
     public Set<Location> currentStructureBorder = new HashSet<>();
     public Set<Location> overlappintStructureBorder = new HashSet<>();
+    public BlueprintItem blueprintItem;
 
-    public EditSession(Structure structure, Location location) {
+    public EditSession(Structure structure, Location location, BlueprintItem blueprintItem) {
         this.uuid = UUID.randomUUID();
         this.center = location;
         this.structure = structure;
+        this.blueprintItem = blueprintItem;
     }
 }

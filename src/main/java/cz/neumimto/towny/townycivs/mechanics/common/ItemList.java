@@ -36,10 +36,6 @@ public class ItemList implements Wrapper {
         @Optional
         public Integer amount;
 
-        @Path("Fuel")
-        @Optional
-        public Integer fuel;
-
         @Path("ConsumeItem")
         @Optional
         public Boolean consumeItem;

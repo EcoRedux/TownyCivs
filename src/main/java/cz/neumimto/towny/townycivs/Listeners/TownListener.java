@@ -15,10 +15,16 @@ import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.gui.BlueprintsGui;
 import cz.neumimto.towny.townycivs.gui.RegionGui;
 import cz.neumimto.towny.townycivs.model.BlueprintItem;
+import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
+import net.kyori.adventure.key.Key;
+import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -29,15 +35,16 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.BoundingBox;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
 
 @Singleton
 public class TownListener implements Listener {
@@ -84,6 +91,20 @@ public class TownListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
+    public void onItemSwitch(PlayerItemHeldEvent event){
+        Player player = event.getPlayer();
+        int newSlot = event.getNewSlot();
+        ItemStack newItem = player.getInventory().getItem(newSlot);
+        ItemService.StructureTool itemType = itemService.getItemType(newItem);
+
+        if (itemType == ItemService.StructureTool.EDIT_TOOL) {
+            handleEditToolInteraction(player, player.getLocation());
+        }else{
+            restoreVisuals(player, player.getLocation());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         ItemService.StructureTool itemType = itemService.getItemType(event.getItem());
@@ -118,28 +139,60 @@ public class TownListener implements Listener {
     }
 
     private void handleEditToolInteraction(Player player, Location location) {
-        Optional<Region> regionOptional = subclaimService.regionAt(location);
-        if (regionOptional.isEmpty()) {
-            MiniMessage miniMessage = MiniMessage.miniMessage();
-            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>No structure at clicked location</red>"));
-            return;
-        }
-
         Resident resident = TownyAPI.getInstance().getResident(player);
         Town resTown = resident.getTownOrNull();
         if (resTown == null) {
             return;
         }
 
+        for(LoadedStructure structure : structureService.getAllStructures(resTown)){
+            Set<Location> locations = managementService.prepareVisualBox(player, structure.center, structure.structureDef.area);
+            Set<Location> center = Collections.singleton(structure.center);
+            managementService.sendBlockChange(player, locations, Material.MAGENTA_STAINED_GLASS);
+            managementService.sendBlockChange(player, center, Material.ORANGE_STAINED_GLASS);
+        }
+
+        Optional<Region> regionOptional = subclaimService.regionAt(location);
+        if (regionOptional.isEmpty()) {
+            MiniMessage miniMessage = MiniMessage.miniMessage();
+            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>No structure at clicked location.</red>"));
+            return;
+        }
+
         WorldCoord worldCoord = WorldCoord.parseWorldCoord(location);
+
         if (worldCoord.getTownOrNull() != resTown) {
             MiniMessage miniMessage = MiniMessage.miniMessage();
-            player.sendMessage(miniMessage.deserialize("<gold>[Townycivs]</gold> <red>No structure at clicked location</red>"));
+            player.sendMessage(miniMessage.deserialize("<gold>[TownyCivs]</gold> <red>This is not in your town!</red>"));
             return;
         }
 
         Region region = regionOptional.get();
         regionGui.display(player, region);
+    }
+
+    private void restoreVisuals(Player player, Location location) {
+        Resident resident = TownyAPI.getInstance().getResident(player);
+        Town resTown = resident.getTownOrNull();
+        if (resTown == null) {
+            return;
+        }
+
+        for (LoadedStructure structure : structureService.getAllStructures(resTown)) {
+            Set<Location> locations = managementService.prepareVisualBox(player, structure.center, structure.structureDef.area);
+            Set<Location> center = Collections.singleton(structure.center);
+
+            // Restore the true blocks instead of AIR
+            for (Location loc : locations) {
+                Block block = loc.getBlock();
+                player.sendBlockChange(loc, block.getBlockData());
+            }
+
+            for (Location loc : center) {
+                Block block = loc.getBlock();
+                player.sendBlockChange(loc, block.getBlockData());
+            }
+        }
     }
 
     private void handleTownBlookInteraction(Player player) {
@@ -154,8 +207,8 @@ public class TownListener implements Listener {
             if (worldCoord.getTownOrNull() == resident.getTownOrNull()) {
 
                 if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
-                    if (managementService.hasEditSession(player)) {
-                        managementService.endSession(player, location);
+                    if (managementService.hasEditSession(player, blueprintItem)) {
+                        managementService.endSession(player, location, blueprintItem);
                         EquipmentSlot hand = event.getHand();
 
 
@@ -167,19 +220,20 @@ public class TownListener implements Listener {
                         }
                         player.getInventory().setItem(hand, itemInUse);
                     } else {
-                        managementService.startNewEditSession(player, blueprintItem.structure, location);
-                        managementService.moveTo(player, location);
+                        managementService.startNewEditSession(player, blueprintItem.structure, location, blueprintItem);
+                        managementService.moveTo(player, location, blueprintItem);
                     }
                 } else if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-                    if (managementService.hasEditSession(player)) {
-                        managementService.moveTo(player, location);
+                    if (managementService.hasEditSession(player, blueprintItem)) {
+                        managementService.moveTo(player, location, blueprintItem);
                     } else {
-                        managementService.startNewEditSession(player, blueprintItem.structure, location);
-                        managementService.moveTo(player, location);
+                        managementService.startNewEditSession(player, blueprintItem.structure, location, blueprintItem);
+                        managementService.moveTo(player, location, blueprintItem);
                     }
                 }
             }else{
-                TownyMessaging.sendErrorMsg(resident, " You can only place structures within your town borders");
+                player.showTitle(Title.title(Component.empty(), Component.text("You can only place structures within your town borders").color(TextColor.color(255, 0, 0))));
+                player.playSound(Sound.sound(Key.key("entity.villager.no"), Sound.Source.MASTER, 1.0f, 1.0f));
             }
         }
     }
@@ -190,7 +244,7 @@ public class TownListener implements Listener {
         Item itemDrop = event.getItemDrop();
 
         Optional<BlueprintItem> blueprintItem = configurationService.getBlueprintItem(itemDrop.getItemStack());
-        blueprintItem.ifPresent(blueprintItem1 -> managementService.endSessionWithoutPlacement(player));
+        blueprintItem.ifPresent(blueprintItem1 -> managementService.endSessionWithoutPlacement(player, blueprintItem.get()));
     }
 
     @EventHandler(priority = EventPriority.LOW)
