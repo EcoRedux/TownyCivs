@@ -11,6 +11,9 @@ import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.key.Key;
+import net.kyori.adventure.sound.Sound;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
@@ -72,12 +75,22 @@ public class FoliaScheduler implements Runnable, Listener {
 
         for (Structure.LoadedPair<Mechanic<Object>, Object> m : upkeep) {
             if (!m.mechanic.check(ctx, m.configValue)) {
+                    org.bukkit.Location structureLocation = structure.inventory.keySet().iterator().next();
+                    Sound anvilSound = Sound.sound(Key.key("minecraft:block.anvil.land"), Sound.Source.BLOCK, 1.0f, 0.5f);
+                    Storage.scheduleSave(structure);
+
+                    for (Player player : structureLocation.getWorld().getPlayers()) {
+                        if (player.getLocation().distance(structureLocation) <= 16.0) {
+                            player.playSound(anvilSound);
+                        }
+                    }
                 return;
             }
         }
 
         for (Structure.LoadedPair<Mechanic<Object>, Object> m : structure.structureDef.production) {
             if (!m.mechanic.check(ctx, m.configValue)) {
+                Storage.scheduleSave(structure);
                 return;
             }
         }
@@ -94,6 +107,7 @@ public class FoliaScheduler implements Runnable, Listener {
         structure.unsavedTickCount++;
         if (structure.unsavedTickCount % structure.structureDef.saveEachNTicks == 0 || forceSaveNextTick.contains(structure.uuid)) {
             if (!inventoryService.anyInventoryIsBeingAccessed(structure)) {
+                System.out.println("saving structure " + structure.uuid + " " + structure.structureDef.name + " after " + structure.unsavedTickCount + " ticks");
                 Storage.scheduleSave(structure);
                 structure.unsavedTickCount = 0;
                 forceSaveNextTick.remove(structure.uuid);

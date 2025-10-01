@@ -23,8 +23,6 @@ public class ItemProduction implements Mechanic<ItemList> {
             ItemStack itemStack = configItem.toItemStack();
             itemStackSet.add(itemStack);
         }
-
-        System.out.println("checking production for " + townContext.loadedStructure.structureId + " items: " + itemStackSet + townContext.structure + configContext.configItems);
         //todo TownyCivs.injector.getInstance(StructureInventoryService.class).canTakeProducedItems(townContext.loadedStructure, itemStackSet);
         return true;
     }

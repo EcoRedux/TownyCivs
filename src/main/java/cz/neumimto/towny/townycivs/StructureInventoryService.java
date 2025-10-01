@@ -1,6 +1,7 @@
 package cz.neumimto.towny.townycivs;
 
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
+import cz.neumimto.towny.townycivs.mechanics.common.ItemList;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -37,6 +38,7 @@ public class StructureInventoryService {
         }
     }
 
+
     private void checkItemsForUpkeepAndWait(Inventory inventory1, Map<Material, AmountAndModel> fulfilled, CountDownLatch cdl) {
         try {
             checkItemsForUpkeep(inventory1, fulfilled);
@@ -47,6 +49,7 @@ public class StructureInventoryService {
 
     private void checkItemsForUpkeep(Inventory inventory1, Map<Material, AmountAndModel> fulfilled) {
         ItemStack inventoryBlocker = itemService.getInventoryBlocker();
+
         for (ItemStack i : inventory1.getContents()) {
             if (i == null) {
                 continue;
@@ -54,10 +57,14 @@ public class StructureInventoryService {
             if (i.equals(inventoryBlocker)) {
                 break;
             }
+
+
             AmountAndModel amountAndModel = fulfilled.get(i.getType());
             if (amountAndModel == null) {
                 continue;
             }
+
+
             Integer modelData = null;
             ItemMeta itemMeta = i.getItemMeta();
 
@@ -69,7 +76,7 @@ public class StructureInventoryService {
                 continue;
             }
 
-            if (itemMeta instanceof Damageable d) {
+            if (itemMeta instanceof Damageable d && i.getType().getMaxDurability() > 0) {
                 if (d.getDamage() + 1 <= i.getType().getMaxDurability()) {
                     fulfilled.remove(i.getType());
                 }
@@ -80,6 +87,7 @@ public class StructureInventoryService {
                 });
             }
         }
+
     }
 
     public void openInventory(Player player, Location location, LoadedStructure structure) {
@@ -159,20 +167,27 @@ public class StructureInventoryService {
         return structsAndPlayers.get(structure.uuid);
     }
 
-    public boolean checkUpkeep(TownContext townContext, Set<ItemStack> upkeep) {
+    public boolean checkUpkeep(TownContext townContext, ItemList itemList) {
+        // Build a map of required items (Material + model) and their required amounts from the config-aware ItemList
         Map<Material, AmountAndModel> fulfilled = new HashMap<>();
 
-        for (ItemStack itemStack : upkeep) {
+        for (ItemList.ConfigItem configItem : itemList.configItems) {
+            ItemStack itemStack = configItem.toItemStack();
             ItemMeta itemMeta = itemStack.getItemMeta();
             Integer model = null;
-            if (itemMeta != null) {
-                if (itemMeta.hasCustomModelData()) {
-                    model = itemMeta.getCustomModelData();
-                }
+            if (itemMeta != null && itemMeta.hasCustomModelData()) {
+                model = itemMeta.getCustomModelData();
             }
-            fulfilled.put(itemStack.getType(), new AmountAndModel(itemStack.getAmount(), model));
+
+            // Use config values with defaults
+            boolean consume = configItem.consumeItem != null ? configItem.consumeItem : false;
+            int consumeAmount = configItem.consumeAmount != null ? configItem.consumeAmount : 0;
+            int damageAmount = configItem.damageAmount != null ? configItem.damageAmount : 0;
+
+            fulfilled.put(itemStack.getType(), new AmountAndModel(itemStack.getAmount(), model, consume, consumeAmount, damageAmount));
         }
 
+        // For each inventory, check if it fulfills the config-aware requirements
         for (Map.Entry<Location, Inventory> e : townContext.loadedStructure.inventory.entrySet()) {
             UUID uuid = structsAndPlayers.get(e.getKey());
             Inventory inventory1 = e.getValue();
@@ -186,6 +201,7 @@ public class StructureInventoryService {
                 checkItemsForUpkeep(inventory1, fulfilled);
             }
 
+            // If any required item is not fulfilled, return false
             if (!fulfilled.isEmpty()) {
                 return false;
             }
@@ -208,35 +224,114 @@ public class StructureInventoryService {
         }
     }
 
-    public void processUpkeep(LoadedStructure loadedStructure, Set<ItemStack> upkeep) {
+    // Config-aware processUpkeep method that uses ItemList
+    public void processUpkeep(LoadedStructure loadedStructure, ItemList itemList) {
         Map<Material, AmountAndModel> fulfilled = new HashMap<>();
 
-        for (ItemStack itemStack : upkeep) {
+        for (ItemList.ConfigItem configItem : itemList.configItems) {
+            ItemStack itemStack = configItem.toItemStack();
             ItemMeta itemMeta = itemStack.getItemMeta();
             Integer model = null;
-            if (itemMeta != null) {
-                if (itemMeta.hasCustomModelData()) {
-                    model = itemMeta.getCustomModelData();
-                }
+            if (itemMeta != null && itemMeta.hasCustomModelData()) {
+                model = itemMeta.getCustomModelData();
             }
-            fulfilled.put(itemStack.getType(), new AmountAndModel(itemStack.getAmount(), model));
+
+            // Use config values with defaults
+            boolean consume = configItem.consumeItem != null ? configItem.consumeItem : false;
+            int consumeAmount = configItem.consumeAmount != null ? configItem.consumeAmount : 0;
+            int damageAmount = configItem.damageAmount != null ? configItem.damageAmount : 0;
+
+            fulfilled.put(itemStack.getType(), new AmountAndModel(itemStack.getAmount(), model, consume, consumeAmount, damageAmount));
         }
 
         for (Map.Entry<Location, Inventory> e : loadedStructure.inventory.entrySet()) {
             UUID uuid = structsAndPlayers.get(e.getKey());
-
             Inventory inventory = e.getValue();
 
             if (uuid != null) {
                 Player vplayer = Bukkit.getPlayer(uuid);
-
-                processUpkeepAndWait(vplayer, inventory, fulfilled);
-
+                processUpkeepConfigAwareAndWait(vplayer, inventory, fulfilled);
             } else {
-                processUpkeep(inventory, fulfilled);
+                processUpkeepConfigAware(inventory, fulfilled);
             }
         }
+    }
 
+    private void processUpkeepConfigAwareAndWait(Player player, Inventory inventory, Map<Material, AmountAndModel> fulfilled) {
+        CountDownLatch cdl = new CountDownLatch(1);
+        TownyCivs.MORE_PAPER_LIB.scheduling().entitySpecificScheduler(player)
+                .run(
+                        () -> processUpkeepConfigAwareAndWait(inventory, fulfilled, cdl),
+                        () -> processUpkeepConfigAwareAndWait(inventory, fulfilled, cdl)
+                );
+        try {
+            cdl.await(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            TownyCivs.logger.log(Level.WARNING, "Could not wait for lock processUpkeepConfigAwareAndWait", e);
+        }
+    }
+
+    private void processUpkeepConfigAwareAndWait(Inventory inventory, Map<Material, AmountAndModel> fulfilled, CountDownLatch cdl) {
+        try {
+            processUpkeepConfigAware(inventory, fulfilled);
+        } finally {
+            cdl.countDown();
+        }
+    }
+
+    private void processUpkeepConfigAware(Inventory inventory, Map<Material, AmountAndModel> fulfilled) {
+        for (int i = 0; i < inventory.getContents().length; i++) {
+            ItemStack content = inventory.getContents()[i];
+            if (content == null) {
+                continue;
+            }
+            AmountAndModel amountAndModel = fulfilled.get(content.getType());
+            if (amountAndModel == null) {
+                continue;
+            }
+            Integer modelData = null;
+            ItemMeta itemMeta = content.getItemMeta();
+
+            if (itemMeta.hasCustomModelData()) {
+                modelData = itemMeta.getCustomModelData();
+            }
+
+            if (!Objects.equals(amountAndModel.model, modelData)) {
+                continue;
+            }
+
+            // Handle damageable items using config values
+            if (itemMeta instanceof Damageable d && content.getType().getMaxDurability() > 0) {
+                // Use damageAmount from config if available, otherwise fall back to amount
+                int damageToApply = amountAndModel.damageAmount > 0 ? amountAndModel.damageAmount : amountAndModel.amount;
+                d.setDamage(d.getDamage() + damageToApply);
+
+                if (d.getDamage() >= content.getType().getMaxDurability()) {
+                    inventory.setItem(i, null);
+                } else {
+                    content.setItemMeta(d);
+                }
+                fulfilled.remove(content.getType());
+            } else {
+                // Handle consumable items using config values
+                if (amountAndModel.consume) {
+                    // Use consumeAmount from config if available, otherwise use amount
+                    int amountToConsume = amountAndModel.consumeAmount > 0 ? amountAndModel.consumeAmount : amountAndModel.amount;
+                    int currentAmount = content.getAmount();
+
+                    if (currentAmount > amountToConsume) {
+                        content.setAmount(currentAmount - amountToConsume);
+                        fulfilled.remove(content.getType());
+                    } else {
+                        inventory.setItem(i, null);
+                        amountAndModel.amount -= currentAmount;
+                    }
+                } else {
+                    // Item is not consumed, just check if it exists (for upkeep checking)
+                    fulfilled.remove(content.getType());
+                }
+            }
+        }
     }
 
     private void processUpkeepAndWait(Player player, Inventory inventory, Map<Material, AmountAndModel> fulfilled) {
@@ -282,7 +377,7 @@ public class StructureInventoryService {
                 continue;
             }
 
-            if (itemMeta instanceof Damageable d) {
+            if (itemMeta instanceof Damageable d && content.getType().getMaxDurability() > 0) {
                 d.setDamage(d.getDamage() + amountAndModel.amount);
                 if (d.getDamage() >= content.getType().getMaxDurability()) {
                     inventory.setItem(i, null);
@@ -322,11 +417,22 @@ public class StructureInventoryService {
     private static class AmountAndModel {
         int amount;
         Integer model;
+        boolean consume;
+        int consumeAmount;
+        int damageAmount;
 
-        public AmountAndModel(int amount, Integer model) {
+        public AmountAndModel(int amount, Integer model, boolean consume, int consumeAmount, int damageAmount) {
             this.amount = amount;
             this.model = model;
+            this.consume = consume;
+            this.consumeAmount = consumeAmount;
+            this.damageAmount = damageAmount;
         }
 
+
+        @Override
+        public String toString() {
+            return "AmountAndModel{amount=" + amount + ", model=" + model + ", consume=" + consume + ", consumeAmount=" + consumeAmount + ", damageAmount=" + damageAmount + '}';
+        }
     }
 }
