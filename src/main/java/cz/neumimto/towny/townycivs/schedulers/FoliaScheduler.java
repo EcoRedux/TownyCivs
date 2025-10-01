@@ -103,6 +103,7 @@ public class FoliaScheduler implements Runnable, Listener {
                             player.playSound(anvilSound);
                         }
                     }
+                Storage.scheduleSave(structure);
                 return;
             }
         }
