@@ -1,7 +1,7 @@
 import java.nio.file.Files
 
 plugins {
-    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'com.gradleup.shadow' version '8.3.0'
     id 'java'
     id("xyz.jpenilla.run-paper") version "1.0.6"
     id "de.undercouch.download" version "5.1.0"
@@ -37,23 +37,28 @@ repositories {
     maven {
         url = "https://repo.essentialsx.net/releases/"
     }
+    maven {
+        name = "jitpack"
+        url = "https://jitpack.io/"
+    }
 }
 
 compileJava {
     options.compilerArgs += ["-parameters"]
-    options.fork = true
-    options.forkOptions.executable = 'javac'
+    // don't set forkOptions.executable when using toolchains
 }
+
 
 test {
     useJUnitPlatform()
 }
 
 dependencies {
-    compileOnly 'dev.folia:folia-api:1.19.4-R0.1-SNAPSHOT'
+    compileOnly 'dev.folia:folia-api:1.21.6-R0.1-SNAPSHOT'
     compileOnly 'com.palmergames.bukkit.towny:towny:0.101.2.0'
     compileOnly 'com.electronwill.night-config:hocon:3.6.5'
     compileOnly 'com.google.inject:guice:5.1.0'
+    compileOnly 'com.github.decentsoftware-eu:decentholograms:2.9.7'
 
     implementation fileTree('libs/')
     testImplementation fileTree('plugins-test/')
@@ -64,7 +69,6 @@ dependencies {
     implementation 'space.arim.morepaperlib:morepaperlib:0.4.2'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
-    compileOnly 'io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT'
     testImplementation 'com.github.seeseemelk:MockBukkit-v1.19:3.1.0'
     // testImplementation 'net.essentialsx:EssentialsX:2.20.0'
     testImplementation 'commons-lang:commons-lang:2.6'
@@ -75,7 +79,7 @@ configurations {
     testImplementation.extendsFrom compileOnly
 }
 
-def targetJavaVersion = 17
+def targetJavaVersion = 21
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
     sourceCompatibility = javaVersion
@@ -107,7 +111,7 @@ shadowJar {
 }
 
 runServer {
-    minecraftVersion("1.19.4")
+    minecraftVersion("1.21.6")
 }
 
 java.nio.file.Path pluginsDir;
