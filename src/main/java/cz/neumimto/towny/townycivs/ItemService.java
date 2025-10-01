@@ -2,6 +2,8 @@ package cz.neumimto.towny.townycivs;
 
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -22,9 +24,15 @@ public class ItemService {
 
     public static ItemStack getTownAdministrationTool() {
         ItemStack itemStack = new ItemStack(Material.ENCHANTED_BOOK);
+
+        Component name = Component.text("Town Administration")
+                .color(NamedTextColor.GOLD)
+                .decorate(TextDecoration.BOLD);
+
+
         itemStack.editMeta(meta -> {
             meta.setCustomModelData(3077);
-            meta.displayName(Component.text("Town Administration"));
+            meta.displayName(name);
             meta.setEnchantmentGlintOverride(true);
         });
         return itemStack;
@@ -32,9 +40,15 @@ public class ItemService {
 
     public static ItemStack getStructureTool() {
         ItemStack itemStack = new ItemStack(Material.PAPER);
+
+
+        Component name = Component.text("Structure Edit Tool")
+                .color(NamedTextColor.GOLD)
+                .decorate(TextDecoration.BOLD);
+
         itemStack.editMeta(meta -> {
             meta.setCustomModelData(3078);
-            meta.displayName(Component.text("Structure Edit Tool"));
+            meta.displayName(name);
             meta.setEnchantmentGlintOverride(true);
         });
         return itemStack;
