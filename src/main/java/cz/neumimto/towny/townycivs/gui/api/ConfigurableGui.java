@@ -4,11 +4,13 @@ import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.conversion.ObjectConverter;
 import com.electronwill.nightconfig.core.file.FileConfig;
 import com.electronwill.nightconfig.hocon.HoconParser;
+import com.github.stefvanschie.inventoryframework.adventuresupport.ComponentHolder;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.PatternPane;
 import com.github.stefvanschie.inventoryframework.pane.util.Pattern;
 import cz.neumimto.towny.townycivs.TownyCivs;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
@@ -121,7 +123,8 @@ public abstract class ConfigurableGui {
 
     protected ChestGui createPane(GuiConfig guiConfig, CommandSender commandSender, Map<String, List<GuiCommand>> data, String param) {
         String title = getTitle(commandSender, guiConfig, param);
-        ChestGui chestGui = new ChestGui(6, TextHolder.deserialize(title));
+
+        ChestGui chestGui = new ChestGui(6, ComponentHolder.of(MiniMessage.miniMessage().deserialize(title)));
 
         int alphabetidx = 0;
         List<String> actualContent = new ArrayList<>();
