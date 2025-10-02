@@ -1,4 +1,5 @@
 name: TownyCivs
+description: Civs ("Allows you to create structures and towns.") but for the Towny Ecosystem.
 version: '${version}'
 main: cz.neumimto.towny.townycivs.TownyCivs
 depend: [ Towny ]

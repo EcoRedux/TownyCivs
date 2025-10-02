@@ -80,7 +80,7 @@ public class FoliaScheduler implements Runnable, Listener {
                     Sound anvilSound = Sound.sound(Key.key("minecraft:block.anvil.land"), Sound.Source.BLOCK, 1.0f, 0.5f);
 
                     // Create a unique hologram ID based on structure location
-                    String hologramId = "Missing_Requirements_" + structure.structureId;
+                    String hologramId = "Missing_Requirements_" + structure.uuid;
 
                     // Create a centered location for the hologram (middle of the block)
                     org.bukkit.Location centeredLocation = structure.center.clone();
@@ -92,13 +92,10 @@ public class FoliaScheduler implements Runnable, Listener {
                     TownyCivs.MORE_PAPER_LIB.scheduling().asyncScheduler().runDelayed(() -> {
                         if (DHAPI.getHologram(hologramId) != null) {
                             DHAPI.removeHologram(hologramId);
-                        }else{
-                            DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
                         }
                     }, java.time.Duration.ofSeconds(10)); // 5 seconds duration
 
-
-                    Storage.scheduleSave(structure);
+                DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
 
                     for (Player player : structureLocation.getWorld().getPlayers()) {
                         if (player.getLocation().distance(structureLocation) <= 16.0) {
