@@ -8,6 +8,7 @@ import cz.neumimto.towny.townycivs.TownyCivs;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.db.Storage;
+import cz.neumimto.towny.townycivs.mechanics.ItemUpkeep;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
@@ -39,6 +40,11 @@ public class FoliaScheduler implements Runnable, Listener {
 
     @Override
     public void run() {
+        // Check if scheduler is enabled - if not, skip processing
+        if (!TownyCivs.schedulerEnabled) {
+            return;
+        }
+
         for (Map.Entry<UUID, Set<LoadedStructure>> entry : structureService.getAllStructuresByTown().entrySet()) {
             Town t = TownyUniverse.getInstance().getTown(entry.getKey());
 
@@ -94,6 +100,7 @@ public class FoliaScheduler implements Runnable, Listener {
                             DHAPI.removeHologram(hologramId);
                         }
                     }, java.time.Duration.ofSeconds(10)); // 5 seconds duration
+
 
                 DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
 

@@ -4,6 +4,7 @@ import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.conversion.ObjectConverter;
 import com.electronwill.nightconfig.core.file.FileConfig;
 import com.electronwill.nightconfig.hocon.HoconParser;
+import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.PatternPane;
 import com.github.stefvanschie.inventoryframework.pane.util.Pattern;
@@ -120,7 +121,7 @@ public abstract class ConfigurableGui {
 
     protected ChestGui createPane(GuiConfig guiConfig, CommandSender commandSender, Map<String, List<GuiCommand>> data, String param) {
         String title = getTitle(commandSender, guiConfig, param);
-        ChestGui chestGui = new ChestGui(6, title);
+        ChestGui chestGui = new ChestGui(6, TextHolder.deserialize(title));
 
         int alphabetidx = 0;
         List<String> actualContent = new ArrayList<>();

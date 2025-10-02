@@ -3,6 +3,7 @@ package cz.neumimto.towny.townycivs.mechanics;
 import cz.neumimto.towny.townycivs.StructureInventoryService;
 import cz.neumimto.towny.townycivs.TownyCivs;
 import cz.neumimto.towny.townycivs.mechanics.common.ItemList;
+import org.bukkit.inventory.ItemStack;
 
 public class ItemUpkeep implements Mechanic<ItemList> {
 

@@ -2,6 +2,7 @@ package cz.neumimto.towny.townycivs.Listeners;
 
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyMessaging;
+import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.event.PreNewDayEvent;
 import com.palmergames.bukkit.towny.event.time.dailytaxes.PreTownPaysNationTaxEvent;
 import com.palmergames.bukkit.towny.listeners.TownyPaperEvents;
@@ -38,7 +39,6 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.util.BoundingBox;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -76,6 +76,41 @@ public class TownListener implements Listener {
     @EventHandler
     public void login(PlayerLoginEvent event) {
 
+    }
+    @EventHandler
+    public void moveEvent(PlayerMoveEvent event) {
+        // Only check if moving to a town block
+        if(TownyUniverse.getInstance().hasTownBlock(WorldCoord.parseWorldCoord(event.getTo()))){
+
+            // Get regions once to avoid duplicate calls
+            Optional<Region> fromRegion = subclaimService.regionAt(event.getFrom());
+            Optional<Region> toRegion = subclaimService.regionAt(event.getTo());
+
+            // Only show title if we're entering a different region
+            if (toRegion.isPresent()) {
+                // If we weren't in any region before, or we were in a different region
+                boolean shouldShowTitle = fromRegion.isEmpty() ||
+                    !fromRegion.get().uuid.equals(toRegion.get().uuid);
+
+                if (shouldShowTitle) {
+                    // Use MiniMessage for better formatting and customization
+                    MiniMessage miniMessage = MiniMessage.miniMessage();
+                    Component structureName = miniMessage.deserialize(toRegion.get().loadedStructure.structureDef.name);
+
+                    // Use subtitle instead of main title for smaller text, with shorter display times
+                    Title title = Title.title(
+                        Component.empty(), // Empty main title
+                        structureName, // Structure name as subtitle using MiniMessage
+                        Title.Times.times(
+                            java.time.Duration.ofMillis(250), // Fade in: 0.25 seconds
+                            java.time.Duration.ofMillis(1500), // Stay: 1.5 seconds
+                            java.time.Duration.ofMillis(250)   // Fade out: 0.25 seconds
+                        )
+                    );
+                    event.getPlayer().showTitle(title);
+                }
+            }
+        }
     }
 
     @EventHandler

@@ -38,7 +38,8 @@ public class TownyCivs extends JavaPlugin {
 
     public static Injector injector;
     public static MorePaperLib MORE_PAPER_LIB;
-    private static BukkitTask task;
+    private static Object schedulerTask;
+    public static volatile boolean schedulerEnabled = true;
     public boolean reloading;
     @Inject
     public ConfigurationService configurationService;
@@ -124,11 +125,8 @@ public class TownyCivs extends JavaPlugin {
 
         injector.getInstance(ItemService.class).registerRecipes();
 
-        if (task != null) {
-            task.cancel();
-        }
-
-        MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
+        schedulerEnabled = true;
+        schedulerTask = MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
                 injector.getInstance(FoliaScheduler.class),
                 Duration.ZERO,
                 Duration.of(1, ChronoUnit.SECONDS));
@@ -142,5 +140,26 @@ public class TownyCivs extends JavaPlugin {
     @Override
     public void onDisable() {
         getLogger().info("TownyCivs disabled");
+        schedulerEnabled = false;
+    }
+
+    public static void stopCurrentScheduler() {
+        schedulerEnabled = false;
+        logger.info("Stopped existing FoliaScheduler task");
+    }
+
+    public static void startNewScheduler() {
+        try {
+            schedulerEnabled = true;
+            schedulerTask = MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
+                    injector.getInstance(FoliaScheduler.class),
+                    Duration.ZERO,
+                    Duration.of(1, ChronoUnit.SECONDS)
+            );
+            logger.info("Started new FoliaScheduler task");
+        } catch (Exception e) {
+            logger.severe("Failed to start new scheduler task: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
