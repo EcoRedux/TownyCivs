@@ -62,6 +62,9 @@ public class Structure {
     @Path("SaveEachNTicks")
     public int saveEachNTicks;
 
+    @Path("TownUpkeep")
+    public double townUpkeep;
+
     @Path("Production")
     @Conversion(Production.class)
     public List<LoadedPair<Mechanic<Object>, Object>> production;

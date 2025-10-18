@@ -2,8 +2,10 @@ package cz.neumimto.towny.townycivs.Listeners;
 
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyMessaging;
+import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.event.PreNewDayEvent;
+import com.palmergames.bukkit.towny.event.TownUpkeepCalculationEvent;
 import com.palmergames.bukkit.towny.event.time.dailytaxes.PreTownPaysNationTaxEvent;
 import com.palmergames.bukkit.towny.listeners.TownyPaperEvents;
 import com.palmergames.bukkit.towny.object.Resident;
@@ -76,6 +78,18 @@ public class TownListener implements Listener {
     @EventHandler
     public void login(PlayerLoginEvent event) {
 
+    }
+
+    @EventHandler
+    public void onTownUpkeepCalculation(TownUpkeepCalculationEvent event){
+        Town town = event.getTown();
+        if(town.hasUpkeep()){
+            Double originalUpkeep = TownySettings.getTownUpkeepCost(town);
+            for(LoadedStructure structure: structureService.getAllStructures(town)){
+                originalUpkeep += structure.structureDef.townUpkeep;
+                event.setUpkeep(originalUpkeep);
+            }
+        }
     }
     @EventHandler
     public void moveEvent(PlayerMoveEvent event) {
