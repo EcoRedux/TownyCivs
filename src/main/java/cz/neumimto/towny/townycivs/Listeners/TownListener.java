@@ -84,7 +84,7 @@ public class TownListener implements Listener {
     public void onTownUpkeepCalculation(TownUpkeepCalculationEvent event){
         Town town = event.getTown();
         if(town.hasUpkeep()){
-            Double originalUpkeep = TownySettings.getTownUpkeepCost(town);
+            Double originalUpkeep = event.getUpkeep();
             for(LoadedStructure structure: structureService.getAllStructures(town)){
                 originalUpkeep += structure.structureDef.townUpkeep;
                 event.setUpkeep(originalUpkeep);

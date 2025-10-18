@@ -124,7 +124,8 @@ public abstract class ConfigurableGui {
     protected ChestGui createPane(GuiConfig guiConfig, CommandSender commandSender, Map<String, List<GuiCommand>> data, String param) {
         String title = getTitle(commandSender, guiConfig, param);
 
-        ChestGui chestGui = new ChestGui(6, ComponentHolder.of(MiniMessage.miniMessage().deserialize(title)));
+        ChestGui chestGui = new ChestGui(guiConfig.inventory.size(), ComponentHolder.of(MiniMessage.miniMessage().deserialize(title)));
+
 
         int alphabetidx = 0;
         List<String> actualContent = new ArrayList<>();
@@ -158,7 +159,7 @@ public abstract class ConfigurableGui {
         }
 
 
-        PatternPane pane = new PatternPane(9, 6, new Pattern(
+        PatternPane pane = new PatternPane(guiConfig.inventory.get(0).length(), guiConfig.inventory.size(), new Pattern(
                 actualContent.toArray(new String[0])
         ));
 
