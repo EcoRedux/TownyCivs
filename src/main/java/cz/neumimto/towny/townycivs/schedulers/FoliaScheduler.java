@@ -85,8 +85,13 @@ public class FoliaScheduler implements Runnable, Listener {
                     org.bukkit.Location structureLocation = structure.inventory.keySet().iterator().next();
                     Sound anvilSound = Sound.sound(Key.key("minecraft:block.anvil.land"), Sound.Source.BLOCK, 1.0f, 0.5f);
 
+
                     // Create a unique hologram ID based on structure location
                     String hologramId = "Missing_Requirements_" + structure.uuid;
+
+                    if (DHAPI.getHologram(hologramId) != null) {
+                    DHAPI.removeHologram(hologramId);
+                    }
 
                     // Create a centered location for the hologram (middle of the block)
                     org.bukkit.Location centeredLocation = structure.center.clone();

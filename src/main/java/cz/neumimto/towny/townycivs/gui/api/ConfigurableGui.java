@@ -124,7 +124,9 @@ public abstract class ConfigurableGui {
     protected ChestGui createPane(GuiConfig guiConfig, CommandSender commandSender, Map<String, List<GuiCommand>> data, String param) {
         String title = getTitle(commandSender, guiConfig, param);
 
+
         ChestGui chestGui = new ChestGui(guiConfig.inventory.size(), ComponentHolder.of(MiniMessage.miniMessage().deserialize(title)));
+        chestGui.setOnGlobalClick(event -> event.setCancelled(true));
 
 
         int alphabetidx = 0;

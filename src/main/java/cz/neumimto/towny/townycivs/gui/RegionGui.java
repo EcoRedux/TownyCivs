@@ -12,6 +12,8 @@ import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.gui.api.GuiCommand;
 import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
+import cz.neumimto.towny.townycivs.mechanics.Mechanic;
+import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
@@ -72,8 +74,11 @@ public class RegionGui extends TCGui {
         Player player = (Player) commandSender;
         Town town = TownyAPI.getInstance().getResident(player).getTownOrNull();
         Map<String, List<GuiCommand>> map = new HashMap<>();
-
+        TownContext townContext = new TownContext();
+        townContext.town = town;
         Region region = subclaimService.getRegion(UUID.fromString(param));
+        townContext.structure = region.loadedStructure.structureDef;
+        townContext.loadedStructure = region.loadedStructure;
 
 
         StructureAndCount count = structureService.findTownStructureById(town, region.loadedStructure.structureDef);
@@ -147,6 +152,33 @@ public class RegionGui extends TCGui {
             chestGui.show(e.getWhoClicked());
         })));
 
+        ItemStack location = new ItemStack(Material.COMPASS);
+        Location loc = region.loadedStructure.center;
+        location.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<aqua>Location: " + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + "</aqua>"));
+        });
+        map.put("Location", List.of(new GuiCommand(location, e -> e.setCancelled(true))));
+
+        ItemStack status = null;
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> upkeep = region.loadedStructure.structureDef.upkeep;
+        for (Structure.LoadedPair<Mechanic<Object>, Object> m : upkeep) {
+            if(!m.mechanic.check(townContext, m.configValue)){
+                status = new ItemStack(Material.RED_WOOL);
+                status.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<red>Your Structure has missing upkeep!</red>"));
+                });
+                break;
+            }else{
+                status = new ItemStack(Material.LIME_WOOL);
+                status.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<green>Your Structure is running smoothly.</green>"));
+                });
+            }
+
+
+        }
+
+        map.put("Status", List.of(new GuiCommand(status, e -> e.setCancelled(true))));
         return map;
     }
 
