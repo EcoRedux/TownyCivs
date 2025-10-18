@@ -20,16 +20,11 @@ import java.util.logging.Level;
 
 public final class Flatfile implements IStorage {
 
-    private Path storage = null;
+    private Path storage;
 
-    @Inject
-    private ItemService itemService;
-
-    @Inject
-    private ConfigurationService configurationService;
-
-    @Inject
-    private StructureInventoryService structureInventoryService;
+    @Inject private ItemService itemService;
+    @Inject private ConfigurationService configurationService;
+    @Inject private StructureInventoryService structureInventoryService;
 
     @Override
     public void init() {
@@ -37,89 +32,124 @@ public final class Flatfile implements IStorage {
         storage.toFile().mkdirs();
     }
 
+    /**
+     * Saves a structure under its town file.
+     * storage/<town-uuid>.yml
+     */
     @Override
     public void save(LoadedStructure structure) {
-        YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set("uuid", structure.uuid.toString());
-        yaml.set("town", structure.town.toString());
-        yaml.set("structureId", structure.structureId);
+        Path file = storage.resolve(structure.town + ".yml");
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file.toFile());
 
-        yaml.set("center", structure.center);
-        yaml.set("editMode", structure.editMode.get());
-        yaml.set("lastTickTime", structure.lastTickTime);
-        List<YamlConfiguration> invlist = new ArrayList<>();
+        String path = structure.uuid.toString(); // structure UUID node
 
+        yaml.set(path + ".structureId", structure.structureId);
+        yaml.set(path + ".center", structure.center);
+        yaml.set(path + ".editMode", structure.editMode.get());
+        yaml.set(path + ".lastTickTime", structure.lastTickTime);
+
+        // Save inventories
+        List<Map<String, Object>> invList = new ArrayList<>();
         ItemStack inventoryBlocker = itemService.getInventoryBlocker();
-        for (Map.Entry<Location, Inventory> e : structure.inventory.entrySet()) {
-            YamlConfiguration inv = new YamlConfiguration();
-            inv.set("location", e.getKey());
-            List<ItemStack> itemStacks = new ArrayList<>();
-            for (ItemStack itemStack : e.getValue().getContents()) {
-                if (itemStack == null) {
-                    continue;
-                }
-                if (itemStack.equals(inventoryBlocker)) {
-                    continue;
-                }
-                itemStacks.add(itemStack);
+
+        for (Map.Entry<Location, Inventory> entry : structure.inventory.entrySet()) {
+            Map<String, Object> inv = new LinkedHashMap<>();
+            inv.put("location", entry.getKey());
+
+            List<ItemStack> contents = new ArrayList<>();
+            for (ItemStack item : entry.getValue().getContents()) {
+                if (item == null || item.equals(inventoryBlocker)) continue;
+                contents.add(item);
             }
-            inv.set("content", itemStacks);
-            invlist.add(inv);
+            inv.put("content", contents);
+            invList.add(inv);
         }
 
-        yaml.set("inventory", invlist);
+        yaml.set(path + ".inventory", invList);
+
         try {
-            yaml.save(storage.resolve(structure.uuid + ".yml").toFile());
+            yaml.save(file.toFile());
         } catch (IOException e) {
-            TownyCivs.logger.log(Level.SEVERE, "Could not save structure " + structure.uuid, e);
+            TownyCivs.logger.log(Level.SEVERE, "Could not save structure " + structure.uuid + " for town " + structure.town, e);
         }
     }
 
-
+    /**
+     * Removes a structure UUID from its town file.
+     */
     @Override
     public void remove(UUID uuid) {
         TownyCivs.logger.info("Removing Structure " + uuid);
 
-        File file = storage.resolve(uuid.toString() + ".yml").toFile();
-        if (file.exists()) {
-            file.delete();
+        File[] files = storage.toFile().listFiles((dir, name) -> name.endsWith(".yml"));
+        if (files == null) return;
+
+        for (File file : files) {
+            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+            if (yaml.contains(uuid.toString())) {
+                yaml.set(uuid.toString(), null);
+                try {
+                    yaml.save(file);
+                    TownyCivs.logger.info("Removed structure " + uuid + " from " + file.getName());
+                } catch (IOException e) {
+                    TownyCivs.logger.log(Level.SEVERE, "Could not update file " + file.getName(), e);
+                }
+                return;
+            }
         }
     }
 
+    /**
+     * Loads all structures from all town files.
+     */
     @Override
     public Collection<LoadedStructure> allStructures() {
         Set<LoadedStructure> set = new HashSet<>();
         File[] files = storage.toFile().listFiles((dir, name) -> name.endsWith(".yml"));
+        if (files == null) return set;
+
         for (File file : files) {
             YamlConfiguration yaml = new YamlConfiguration();
             try {
                 yaml.load(file);
+                // Town UUID from filename
+                UUID townUUID = UUID.fromString(file.getName().replace(".yml", ""));
 
-                var struct = new LoadedStructure(
-                        UUID.fromString(yaml.getString("uuid")),
-                        UUID.fromString(yaml.getString("town")),
-                        yaml.getString("structureId"),
-                        yaml.getLocation("center"),
-                        configurationService.findStructureById(yaml.getString("structureId")).orElse(null)
-                );
+                for (String structKey : yaml.getKeys(false)) {
+                    String path = structKey;
 
-                struct.editMode.set(yaml.getBoolean("editMode"));
-                struct.lastTickTime = yaml.getLong("lastTickTime");
+                    var struct = new LoadedStructure(
+                            UUID.fromString(structKey),
+                            townUUID,
+                            yaml.getString(path + ".structureId"),
+                            yaml.getLocation(path + ".center"),
+                            configurationService.findStructureById(yaml.getString(path + ".structureId")).orElse(null)
+                    );
 
-                List<Map<String, ?>> csection = (List<Map<String, ?>>) yaml.getList("inventory");
-                if (csection != null) {
-                    for (Map<String, ?> map : csection) {
-                        Location location = (Location) map.get("location");
-                        List<ItemStack> items = (List<ItemStack>) map.get("content");
-                        structureInventoryService.loadStructureInventory(struct, location, items.toArray(ItemStack[]::new));
+                    struct.editMode.set(yaml.getBoolean(path + ".editMode"));
+                    struct.lastTickTime = yaml.getLong(path + ".lastTickTime");
+
+                    List<Map<String, ?>> invList = (List<Map<String, ?>>) yaml.getList(path + ".inventory");
+                    if (invList != null) {
+                        for (Map<String, ?> invMap : invList) {
+                            Location loc = (Location) invMap.get("location");
+                            List<ItemStack> items = (List<ItemStack>) invMap.get("content");
+                            if (loc != null && items != null) {
+                                structureInventoryService.loadStructureInventory(
+                                        struct, loc, items.toArray(ItemStack[]::new)
+                                );
+                            }
+                        }
                     }
-                }
-                set.add(struct);
-            } catch (IOException | InvalidConfigurationException e) {
-                throw new RuntimeException(e);
-            }
 
+                    set.add(struct);
+                }
+
+            } catch (IOException | InvalidConfigurationException e) {
+                TownyCivs.logger.log(Level.SEVERE, "Failed to load " + file.getName(), e);
+            }
         }
+
         return set;
     }
 }

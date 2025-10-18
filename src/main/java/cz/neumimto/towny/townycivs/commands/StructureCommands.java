@@ -35,6 +35,9 @@ public class StructureCommands extends BaseCommand {
     private HelpMenu2Gui helpMenu2Gui;
 
     @Inject
+    private RegionGui regionGui;
+
+    @Inject
     private StructureService structureService;
 
     @Inject

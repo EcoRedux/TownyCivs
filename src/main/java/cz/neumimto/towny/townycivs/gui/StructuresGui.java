@@ -8,6 +8,7 @@ import cz.neumimto.towny.townycivs.TownyCivs;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.gui.api.GuiCommand;
 import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
+import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -15,6 +16,7 @@ import org.bukkit.inventory.ItemStack;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,11 +51,11 @@ public class StructuresGui extends TCGui {
         Town town = TownyAPI.getInstance().getResident((Player) commandSender).getTownOrNull();
         Map<String, List<GuiCommand>> map = new HashMap<>();
 
-        List<StructureAndCount> structures = structureService.findTownStructures(town);
+        Collection<LoadedStructure> structures = structureService.getAllStructures(town);
 
-        for (StructureAndCount sc : structures) {
-            ItemStack itemStack = structureService.toItemStack(sc.structure, sc.count);
-            map.put("Structures", List.of(new GuiCommand(itemStack, "townycivs structure " + sc.structure.id)));
+        for (LoadedStructure sc : structures) {
+            ItemStack itemStack = structureService.toItemStack(sc.structureDef, 1);
+            map.put("Structures", List.of(new GuiCommand(itemStack, "townycivs structure " + sc.uuid)));
         }
 
         return map;
