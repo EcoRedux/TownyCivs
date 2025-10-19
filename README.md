@@ -1,6 +1,6 @@
 # TownyCivs
 
-[![Java CI with Gradle](https://github.com/NeumimTo/TownyCivs/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/NeumimTo/TownyCivs/actions/workflows/gradle.yml)
+[![Java CI with Gradle](https://github.com/EcoRedux/TownyCivs/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/EcoRedux/TownyCivs/actions/workflows/gradle.yml)
 
 Towny addon that adds automated farms, factories and administrative buildings into the Towny Ecosystem
 
