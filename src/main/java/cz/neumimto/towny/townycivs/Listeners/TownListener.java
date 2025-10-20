@@ -37,6 +37,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
@@ -296,11 +297,10 @@ public class TownListener implements Listener {
         blueprintItem.ifPresent(blueprintItem1 -> managementService.endSessionWithoutPlacement(player, blueprintItem.get()));
     }
 
-    @EventHandler(priority = EventPriority.LOW)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void blockBreakEvent(BlockBreakEvent event) {
         Player player = event.getPlayer();
         Block block = event.getBlock();
-
         handleBlockEditingWithinRegion(player, block, event);
     }
 
@@ -308,7 +308,13 @@ public class TownListener implements Listener {
     public void blockPlaceEvent(BlockPlaceEvent event) {
         Player player = event.getPlayer();
         Block block = event.getBlock();
+        handleBlockEditingWithinRegion(player, block, event);
+    }
 
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onBlockDrop(BlockDropItemEvent event) {
+        Block block = event.getBlock();
+        Player player = event.getPlayer();
         handleBlockEditingWithinRegion(player, block, event);
     }
 
@@ -332,8 +338,10 @@ public class TownListener implements Listener {
             Region region = structureAt.get();
             if (!managementService.isBeingEdited(region.loadedStructure)) {
                 Structure structure = configurationService.findStructureById(region.structureId).get();
-                player.sendMessage(Component.text("Editing of " + structure.name + " is not allowed"));
-                player.sendMessage(Component.text("If you wish to edit " + structure.name + " craft an editing tool and righclick within this region"));
+                if(!(event instanceof BlockDropItemEvent)){
+                    player.sendMessage(Component.text("Editing of " + structure.name + " is not allowed"));
+                    player.sendMessage(Component.text("If you wish to edit " + structure.name + " craft an editing tool and righclick within this region"));
+                }
                 event.setCancelled(true);
                 return;
             }

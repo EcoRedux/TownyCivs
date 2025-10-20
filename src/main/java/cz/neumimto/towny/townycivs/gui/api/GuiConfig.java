@@ -34,7 +34,7 @@ public class GuiConfig {
         @Path("Id")
         public String id;
         @Path("Model")
-        public Integer model;
+        public String model;
         @Path("Supplier")
         public String supplier;
         @Path("OnClick")

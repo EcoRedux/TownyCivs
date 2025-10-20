@@ -18,6 +18,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.components.CustomModelDataComponent;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -240,7 +241,9 @@ public abstract class ConfigurableGui {
         ItemStack itemStack = new ItemStack(Material.matchMaterial(maskConfig.id));
         ItemMeta itemMeta = itemStack.getItemMeta();
         if (maskConfig.model != null) {
-            itemMeta.setCustomModelData(maskConfig.model);
+            CustomModelDataComponent cmdComp = itemMeta.getCustomModelDataComponent();
+            cmdComp.setStrings(List.of(maskConfig.model));
+            itemMeta.setCustomModelDataComponent(cmdComp);
         }
         if (maskConfig.translationKey != null) {
 
