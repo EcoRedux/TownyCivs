@@ -259,16 +259,6 @@ public class TownListener implements Listener {
                 if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
                     if (managementService.hasEditSession(player, blueprintItem)) {
                         managementService.endSession(player, location, blueprintItem);
-                        EquipmentSlot hand = event.getHand();
-
-
-                        ItemStack itemInUse = event.getItem();
-                        if (itemInUse.getAmount() > 1) {
-                            itemInUse.setAmount(itemInUse.getAmount() - 1);
-                        } else {
-                            itemInUse = null;
-                        }
-                        player.getInventory().setItem(hand, itemInUse);
                     } else {
                         managementService.startNewEditSession(player, blueprintItem.structure, location, blueprintItem);
                         managementService.moveTo(player, location, blueprintItem);

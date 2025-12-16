@@ -18,6 +18,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -147,6 +148,14 @@ public class ManagementService {
                     removeAreaBorder(player, editSession.currentStructureBorder);
                 }
                 editSessions.remove(new PlayerBlueprintKey(player.getUniqueId(), item));
+                EquipmentSlot hand = player.getActiveItemHand();
+                ItemStack itemInUse = player.getInventory().getItem(hand);
+                if (itemInUse.getAmount() > 1) {
+                    itemInUse.setAmount(itemInUse.getAmount() - 1);
+                } else {
+                    itemInUse = null;
+                }
+                player.getInventory().setItem(hand, itemInUse);
             }
         }
     }

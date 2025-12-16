@@ -137,6 +137,7 @@ public class StructureService {
         boolean pass = true;
         for (Structure.LoadedPair<Mechanic<?>, ?> requirement : context.structure.buyRequirements) {
             Object configValue = requirement.configValue;
+            System.out.println("Checking requirement " + requirement.mechanic.id() + " with config " + configValue);
             var mechanic = (Mechanic<Object>) requirement.mechanic;
             if (!mechanic.check(context, configValue)) {
                 mechanic.nokmessage(context, configValue);
