@@ -21,11 +21,12 @@ import org.bukkit.inventory.meta.ItemMeta;
 import javax.inject.Singleton;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 import java.util.*;
 import java.util.logging.Level;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.stream.Stream;
 
 @Singleton
 public class ConfigurationService {
@@ -105,10 +106,7 @@ public class ConfigurationService {
         }
 
         if (config.copyDefaults) {
-            copy(structures, "cactus-farm.conf");
-            copy(structures, "wheat-farm.conf");
-            copy(structures, "coal-mine.conf");
-            copy(structures, "iron-mine.conf");
+            copyResourceDirectoryRecursively("structures", structures);
         }
 
         try (var paths = Files.newDirectoryStream(structures)) {
@@ -118,12 +116,24 @@ public class ConfigurationService {
     }
 
     private void loadStructure(Path path) {
+        if (Files.isDirectory(path)) {
+            try (var subPaths = Files.newDirectoryStream(path)) {
+                subPaths.forEach(this::loadStructure);
+            } catch (IOException e) {
+                TownyCivs.logger.log(Level.SEVERE, "Unable to read directory " + path.getFileName(), e);
+            }
+            return;
+        }
+
+        if (!path.toString().endsWith(".conf")) {
+            return;
+        }
+
         Structure structure;
         try (var f = FileConfig.of(path)) {
             f.load();
             structure = new Structure();
             new ObjectConverter().toObject(f, structure);
-
         } catch (Throwable t) {
             t.printStackTrace();
             TownyCivs.logger.log(Level.SEVERE, "Unable to read structure file " + path.getFileName());
@@ -134,14 +144,45 @@ public class ConfigurationService {
         TownyCivs.logger.info("Loaded structure " + path.getFileName());
     }
 
-    public void copy(Path structures, String file) {
-        Path resolve = structures.resolve(file);
-        if (!Files.exists(resolve)) {
-            try (InputStream resourceAsStream = getClass().getClassLoader().getResourceAsStream("structures/" + file)) {
-                Files.write(resolve, resourceAsStream.readAllBytes(), StandardOpenOption.CREATE_NEW);
-            } catch (IOException e) {
-                e.printStackTrace();
+    private void copyResourceDirectoryRecursively(String resourcePath, Path targetPath) {
+        try {
+            URI uri = getClass().getClassLoader().getResource(resourcePath).toURI();
+            Path resourceDir;
+
+            if (uri.getScheme().equals("jar")) {
+                FileSystem fs = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                resourceDir = fs.getPath(resourcePath);
+            } else {
+                resourceDir = Paths.get(uri);
             }
+
+            try (Stream<Path> paths = Files.walk(resourceDir)) {
+                paths.forEach(source -> {
+                    try {
+                        Path relative = resourceDir.relativize(source);
+                        Path destination = targetPath.resolve(relative.toString());
+
+                        if (Files.isDirectory(source)) {
+                            if (!Files.exists(destination)) {
+                                Files.createDirectories(destination);
+                                TownyCivs.logger.info("Created directory: " + relative);
+                            }
+                        } else {
+                            if (!Files.exists(destination)) {
+                                Files.copy(source, destination);
+                                TownyCivs.logger.info("Copied default file: " + relative);
+                            }
+                        }
+                    } catch (IOException e) {
+                        TownyCivs.logger.log(Level.SEVERE, "Failed to copy resource: " + source, e);
+                    }
+                });
+            }
+
+        } catch (URISyntaxException | IOException e) {
+            TownyCivs.logger.log(Level.SEVERE, "Failed to copy default structures recursively", e);
+        } catch (NullPointerException e) {
+            TownyCivs.logger.warning("No default structures found in resources - skipping copy");
         }
     }
 

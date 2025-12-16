@@ -247,7 +247,7 @@ public abstract class ConfigurableGui {
         }
         if (maskConfig.translationKey != null) {
 
-            itemMeta.setDisplayName(translateKey(commandSender, maskConfig.translationKey));
+            itemMeta.displayName(MiniMessage.miniMessage().deserialize(translateKey(commandSender, maskConfig.translationKey)));
         } else {
             itemMeta.setDisplayName(" ");
         }
