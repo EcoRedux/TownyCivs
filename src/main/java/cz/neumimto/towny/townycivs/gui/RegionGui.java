@@ -12,6 +12,7 @@ import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.gui.api.GuiCommand;
 import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
+import cz.neumimto.towny.townycivs.mechanics.ItemUpkeep;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
@@ -178,14 +179,128 @@ public class RegionGui extends TCGui {
 
         }
 
-        map.put("Status", List.of(new GuiCommand(status, e -> e.setCancelled(true))));
+        map.put("Status", List.of(new GuiCommand(status, e -> {
+            e.setCancelled(true);
+            if(e.isLeftClick()){
+                ChestGui chestGui = upkeepGui(region);
+                chestGui.show(e.getWhoClicked());
+            }else if(e.isRightClick()){
+                ChestGui chestGui = productionGui(region);
+                chestGui.show(e.getWhoClicked());
+            }
+
+        })));
+
         return map;
+    }
+
+    private ChestGui upkeepGui(Region region) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        ChestGui chestGui = new ChestGui(3, "Upkeep");
+
+        StaticPane staticPane = new StaticPane(9, 3);
+        chestGui.addPane(staticPane);
+        int x = 0;
+        int y = 0;
+
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> upkeep = region.loadedStructure.structureDef.upkeep;
+
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> production = region.loadedStructure.structureDef.production;
+
+        for (Structure.LoadedPair<Mechanic<Object>, Object> m : upkeep) {
+            String mechanicId = m.mechanic.id();
+
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPKEEP)) {
+                // ItemUpkeep - show items that will be consumed
+                cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
+                    (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
+
+                for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                    ItemStack itemStack = configItem.toItemStack();
+                    itemStack.editMeta(itemMeta -> {
+                        var lore = new ArrayList<Component>();
+                        lore.add(mm.deserialize("<yellow>Upkeep Item</yellow>"));
+                        if (configItem.consumeItem != null && configItem.consumeItem) {
+                            lore.add(mm.deserialize("<red>Consumed: " + (configItem.consumeAmount != null ? configItem.consumeAmount : 1) + "x</red>"));
+                        }
+                        if (configItem.damageAmount != null) {
+                            lore.add(mm.deserialize("<gold>Damage: " + configItem.damageAmount + "</gold>"));
+                        }
+                        itemMeta.lore(lore);
+                    });
+                    staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                    x++;
+                    if (x == 9) {
+                        x = 0;
+                        y++;
+                    }
+                }
+            }
+
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_UPKEEP)) {
+                // MoneyUpkeep - show as paper item
+                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper doubleWrapper = (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) m.configValue;
+
+                ItemStack moneyItem = new ItemStack(Material.PAPER);
+                moneyItem.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<gold>Money Upkeep</gold>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Cost: $" + doubleWrapper.value + "</yellow>"));
+                    itemMeta.lore(lore);
+                });
+                staticPane.addItem(new GuiItem(moneyItem, e -> e.setCancelled(true)), x, y);
+                x++;
+                if (x == 9) {
+                    x = 0;
+                    y++;
+                }
+            }
+        }
+        return chestGui;
+    }
+
+    private ChestGui productionGui(Region region) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        ChestGui chestGui = new ChestGui(3, "Production");
+
+        StaticPane staticPane = new StaticPane(9, 3);
+        chestGui.addPane(staticPane);
+        int x = 0;
+        int y = 0;
+
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> production = region.loadedStructure.structureDef.production;
+
+        for (Structure.LoadedPair<Mechanic<Object>, Object> m : production) {
+            String mechanicId = m.mechanic.id();
+
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.ITEM_PRODUCTION)) {
+                // ItemProduction - show items that will be produced
+                cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
+                    (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
+
+                for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                    ItemStack itemStack = configItem.toItemStack();
+                    itemStack.editMeta(itemMeta -> {
+                        var lore = new ArrayList<Component>();
+                        lore.add(mm.deserialize("<yellow>Produced Item</yellow>"));
+                        itemMeta.lore(lore);
+                    });
+                    staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                    x++;
+                    if (x == 9) {
+                        x = 0;
+                        y++;
+                    }
+                }
+            }
+        }
+        return chestGui;
     }
 
     @NotNull
     private ChestGui remainingBlocksGui(Region region) {
         MiniMessage mm = MiniMessage.miniMessage();
-        ChestGui chestGui = new ChestGui(6, "Remaining Blocks");
+        ChestGui chestGui = new ChestGui(3, "Remaining Blocks");
 
         StaticPane staticPane = new StaticPane(9, 6);
         chestGui.addPane(staticPane);

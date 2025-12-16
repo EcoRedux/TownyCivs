@@ -43,6 +43,7 @@ public class MechanicService {
 
         prodReq(new Price());
         prodReq(new ItemUpkeep());
+        prodReq(new MoneyUpkeep());
 
         placeReq(new Permission());
         placeReq(new YBellow());
