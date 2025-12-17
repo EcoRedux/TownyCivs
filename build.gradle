@@ -65,7 +65,7 @@ dependencies {
 
     //
 
-    implementation 'com.github.stefvanschie.inventoryframework:IF:0.10.8'
+    implementation 'com.github.stefvanschie.inventoryframework:IF:0.11.5'
     implementation "co.aikar:acf-paper:0.5.1-SNAPSHOT"
     implementation 'net.kyori:adventure-text-minimessage:4.10.1'
     implementation 'space.arim.morepaperlib:morepaperlib:0.4.2'
@@ -141,13 +141,23 @@ task dlPlugins {
         overwrite false
     }
 
-    //copy {
-    //    from {
-    //        var path = System.getProperty("java.io.tmpdir") + "/Towny.zip"
-    //        zipTree(path).matching { include '**/*.jar' }.files
-    //    }
-    //    into pluginsDir.toFile()
-    //}
+
+    task stopServer(type: Exec) {
+        workingDir file('C:\\Users\\itsju\\OneDrive\\Desktop\\civs')
+        commandLine 'taskkill', '/F', '/IM', 'java.exe'
+        ignoreExitValue true
+    }
+
+    task startServer(type: Exec) {
+        workingDir file('C:\\Users\\itsju\\OneDrive\\Desktop\\civs')
+        commandLine 'cmd', '/c', 'start', 'cmd', '/k', 'java', '-jar', 'paper-1.21.10-117(1).jar', 'nogui'
+    }
+
+    task buildAndStart {
+        dependsOn clean, shadowJar
+        finalizedBy startServer
+    }
+
 
     dependsOn preparePluginsDir
 }

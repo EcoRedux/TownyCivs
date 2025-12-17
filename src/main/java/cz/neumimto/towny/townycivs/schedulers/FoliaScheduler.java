@@ -17,6 +17,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 
@@ -94,7 +95,8 @@ public class FoliaScheduler implements Runnable, Listener {
                     }
 
                     // Create a centered location for the hologram (middle of the block)
-                    org.bukkit.Location centeredLocation = structure.center.clone();
+                for(Location loc : structure.containerLocations){
+                    org.bukkit.Location centeredLocation = loc;
                     centeredLocation.add(0.5, 0, 0.5); // Center X/Z and position above the block
 
                     // Create the hologram
@@ -107,13 +109,14 @@ public class FoliaScheduler implements Runnable, Listener {
                     }, java.time.Duration.ofSeconds(10)); // 5 seconds duration
 
 
-                DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
+                    DHAPI.createHologram(hologramId, centeredLocation, Collections.singletonList("&4&l!"));
 
                     for (Player player : structureLocation.getWorld().getPlayers()) {
                         if (player.getLocation().distance(structureLocation) <= 16.0) {
                             player.playSound(anvilSound);
                         }
                     }
+                }
                 Storage.scheduleSave(structure);
                 return;
             }

@@ -1,6 +1,9 @@
 package cz.neumimto.towny.townycivs.mechanics;
 
+import com.palmergames.bukkit.towny.TownyAPI;
+import com.palmergames.bukkit.towny.TownyUniverse;
 import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 
 class TownRank implements Mechanic<DoubleWrapper> {
 
@@ -11,7 +14,7 @@ class TownRank implements Mechanic<DoubleWrapper> {
 
     @Override
     public void nokmessage(TownContext townContext, DoubleWrapper configuration) {
-        townContext.player.sendMessage("Town level is not high enough to build " + townContext.structure.name);
+        townContext.player.sendMessage(MiniMessage.miniMessage().deserialize("<gold>[TownyCivs]</gold> <red>Town Level is not high enough to build</red><aqua> " + townContext.structure.name + "</aqua><red>."));
     }
 
     @Override

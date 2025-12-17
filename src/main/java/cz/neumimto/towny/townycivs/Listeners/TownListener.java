@@ -5,8 +5,10 @@ import com.palmergames.bukkit.towny.TownyMessaging;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.event.PreNewDayEvent;
+import com.palmergames.bukkit.towny.event.TownInvitePlayerEvent;
 import com.palmergames.bukkit.towny.event.TownUpkeepCalculationEvent;
 import com.palmergames.bukkit.towny.event.time.dailytaxes.PreTownPaysNationTaxEvent;
+import com.palmergames.bukkit.towny.event.town.TownLevelIncreaseEvent;
 import com.palmergames.bukkit.towny.listeners.TownyPaperEvents;
 import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.Town;
@@ -307,6 +309,15 @@ public class TownListener implements Listener {
         Player player = event.getPlayer();
         handleBlockEditingWithinRegion(player, block, event);
     }
+
+    public void onTownLevelUp(TownLevelIncreaseEvent event) {
+        //todo later to block towns from leveling up if they dont have the necessary structures like town hall
+    }
+
+    public void onTownInvite(TownInvitePlayerEvent event){
+        //todo later to customize invites or block them based on certain conditions, like if max town size is reached theyre forced to build first a structure that increases max size
+    }
+
 
     private void handleBlockEditingWithinRegion(Player player, Block block, Cancellable event) {
         Resident resident = TownyAPI.getInstance().getResident(player);

@@ -132,12 +132,22 @@ public class StructureService {
         return itemStack;
     }
 
+    public boolean canShow(TownContext context) {
+        boolean pass = true;
+        for (Structure.LoadedPair<Mechanic<?>, ?> requirement : context.structure.buyRequirements) {
+            Object configValue = requirement.configValue;
+            var mechanic = (Mechanic<Object>) requirement.mechanic;
+            if (!mechanic.check(context, configValue)) {
+                pass = false;
+            }
+        }
+        return pass;
+    }
 
     public boolean canBuy(TownContext context) {
         boolean pass = true;
         for (Structure.LoadedPair<Mechanic<?>, ?> requirement : context.structure.buyRequirements) {
             Object configValue = requirement.configValue;
-            System.out.println("Checking requirement " + requirement.mechanic.id() + " with config " + configValue);
             var mechanic = (Mechanic<Object>) requirement.mechanic;
             if (!mechanic.check(context, configValue)) {
                 mechanic.nokmessage(context, configValue);
