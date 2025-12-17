@@ -187,6 +187,10 @@ public class StructureInventoryService {
             fulfilled.put(itemStack.getType(), new AmountAndModel(itemStack.getAmount(), model, consume, consumeAmount, damageAmount));
         }
 
+        // ← TOGGLE LOGIC: Determine if we need ALL items (AND) or ANY item (OR)
+        boolean requireAll = itemList.requireAll != null ? itemList.requireAll : true;  // Default: true (AND logic)
+        int initialSize = fulfilled.size();
+
         // For each inventory, check if it fulfills the config-aware requirements
         for (Map.Entry<Location, Inventory> e : townContext.loadedStructure.inventory.entrySet()) {
             UUID uuid = structsAndPlayers.get(e.getKey());
@@ -201,12 +205,26 @@ public class StructureInventoryService {
                 checkItemsForUpkeep(inventory1, fulfilled);
             }
 
-            // If any required item is not fulfilled, return false
-            if (!fulfilled.isEmpty()) {
-                return false;
+            // ← TOGGLE LOGIC: Check based on RequireAll setting
+            if (requireAll) {
+                // AND logic: ALL items must be fulfilled
+                if (!fulfilled.isEmpty()) {
+                    return false;  // Some items still missing
+                }
+            } else {
+                // OR logic: ANY ONE item must be fulfilled
+                if (fulfilled.size() < initialSize) {
+                    return true;  // At least one item was found and removed from fulfilled
+                }
             }
 
         }
+        
+        // For OR logic, if we get here, no items were found
+        if (!requireAll) {
+            return false;
+        }
+        
         return true;
     }
 

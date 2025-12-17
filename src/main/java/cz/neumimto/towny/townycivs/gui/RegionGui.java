@@ -160,7 +160,11 @@ public class RegionGui extends TCGui {
         });
         map.put("Location", List.of(new GuiCommand(location, e -> e.setCancelled(true))));
 
-        ItemStack status = null;
+        ItemStack status = new ItemStack(Material.LIME_WOOL);
+        status.editMeta(itemMeta -> {
+            itemMeta.displayName(mm.deserialize("<green>Your Structure is running smoothly.</green>"));
+        });
+
         List<Structure.LoadedPair<Mechanic<Object>, Object>> upkeep = region.loadedStructure.structureDef.upkeep;
         for (Structure.LoadedPair<Mechanic<Object>, Object> m : upkeep) {
             if(!m.mechanic.check(townContext, m.configValue)){
@@ -211,28 +215,63 @@ public class RegionGui extends TCGui {
             String mechanicId = m.mechanic.id();
 
             if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPKEEP)) {
-                // ItemUpkeep - show items that will be consumed
                 cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
                     (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
 
-                for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
-                    ItemStack itemStack = configItem.toItemStack();
-                    itemStack.editMeta(itemMeta -> {
+                boolean requireAll = itemList.requireAll != null ? itemList.requireAll : true;
+
+                if (!requireAll) {
+                    ItemStack bundleStack = new ItemStack(Material.BUNDLE);
+                    bundleStack.editMeta(itemMeta -> {
+                        BundleMeta bundleMeta = (BundleMeta) itemMeta;
+                        bundleMeta.displayName(mm.deserialize("<aqua>Alternative Options (ANY ONE)</aqua>"));
                         var lore = new ArrayList<Component>();
-                        lore.add(mm.deserialize("<yellow>Upkeep Item</yellow>"));
-                        if (configItem.consumeItem != null && configItem.consumeItem) {
-                            lore.add(mm.deserialize("<red>Consumed: " + (configItem.consumeAmount != null ? configItem.consumeAmount : 1) + "x</red>"));
+                        lore.add(mm.deserialize("<gray>Any one of these items works:</gray>"));
+
+                        // Add each item to the bundle
+                        for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                            ItemStack itemStack = configItem.toItemStack();
+                            bundleMeta.addItem(itemStack);
+
+                            // Add info to lore
+                            String itemName = itemStack.getType().name();
+                            if (configItem.consumeItem != null && configItem.consumeItem) {
+                                int amount = configItem.consumeAmount != null ? configItem.consumeAmount : 1;
+                                lore.add(mm.deserialize("<white>• " + itemName + " <red>(Consumed: " + amount + ")</red></white>"));
+                            } else if (configItem.damageAmount != null) {
+                                lore.add(mm.deserialize("<white>• " + itemName + " <gold>(Damage: " + configItem.damageAmount + ")</gold></white>"));
+                            } else {
+                                lore.add(mm.deserialize("<white>• " + itemName + "</white>"));
+                            }
                         }
-                        if (configItem.damageAmount != null) {
-                            lore.add(mm.deserialize("<gold>Damage: " + configItem.damageAmount + "</gold>"));
-                        }
-                        itemMeta.lore(lore);
+                        bundleMeta.lore(lore);
                     });
-                    staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                    staticPane.addItem(new GuiItem(bundleStack, e -> e.setCancelled(true)), x, y);
                     x++;
                     if (x == 9) {
                         x = 0;
                         y++;
+                    }
+                } else {
+                    for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                        ItemStack itemStack = configItem.toItemStack();
+                        itemStack.editMeta(itemMeta -> {
+                            var lore = new ArrayList<Component>();
+                            lore.add(mm.deserialize("<yellow>Required Item</yellow>"));
+                            if (configItem.consumeItem != null && configItem.consumeItem) {
+                                lore.add(mm.deserialize("<red>Consumed: " + (configItem.consumeAmount != null ? configItem.consumeAmount : 1) + "x</red>"));
+                            }
+                            if (configItem.damageAmount != null) {
+                                lore.add(mm.deserialize("<gold>Damage: " + configItem.damageAmount + "</gold>"));
+                            }
+                            itemMeta.lore(lore);
+                        });
+                        staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                        x++;
+                        if (x == 9) {
+                            x = 0;
+                            y++;
+                        }
                     }
                 }
             }

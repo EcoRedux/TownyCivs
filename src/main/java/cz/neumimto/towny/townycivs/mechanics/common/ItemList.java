@@ -14,6 +14,10 @@ public class ItemList implements Wrapper {
     @Path("Items")
     public List<ConfigItem> configItems = new ArrayList<>();
 
+    @Path("RequireAll")
+    @Optional
+    public Boolean requireAll;
+
     @Override
     public boolean isObject() {
         return true;
