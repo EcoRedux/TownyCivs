@@ -31,9 +31,10 @@ jobs:
           distribution: 'temurin'
 
       - name: Build with Gradle
-        uses: gradle/gradle-build-action@v3 # Updated to v3 for stability and caching improvements
+        uses: gradle/actions/setup-gradle@v5 # Updated to v3 for stability and caching improvements
         with:
           arguments: shadowJar --scan -x test
+          
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4 # Updated to v4
