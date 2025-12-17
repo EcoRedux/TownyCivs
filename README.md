@@ -2,7 +2,7 @@
 
 [![Java CI with Gradle](https://github.com/EcoRedux/TownyCivs/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/EcoRedux/TownyCivs/actions/workflows/gradle.yml) [![CodeFactor](https://www.codefactor.io/repository/github/ecoredux/townycivs/badge/master)](https://www.codefactor.io/repository/github/ecoredux/townycivs/overview/master)
 
-Towny addon that adds automated farms, factories and administrative buildings into the Towny Ecosystem
+[Towny](https://github.com/TownyAdvanced/Towny) addon that adds automated farms, factories and administrative buildings into the [Towny Ecosystem](https://github.com/TownyAdvanced)
 
 The plugin has been inspired by the mod [MineColonies](https://www.curseforge.com/minecraft/mc-mods/minecolonies) and plugin [Civs](https://www.spigotmc.org/resources/civs.67350/) (hence its name) 
 
