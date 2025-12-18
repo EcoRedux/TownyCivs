@@ -100,11 +100,18 @@ public class StructureInventoryService {
                 .run(() -> player.openInventory(inv), null);
     }
 
-    public void closeInvenotory(Player player) {
+    public void closeInventory(Player player) {
         StructAndInv sai = playersAndInv.remove(player.getUniqueId());
         if (sai != null) {
             structsAndPlayers.remove(sai.location);
         }
+    }
+
+    /**
+     * Get the structure and inventory a player is currently viewing
+     */
+    public StructAndInv getPlayerStructAndInv(UUID playerUuid) {
+        return playersAndInv.get(playerUuid);
     }
 
     public void addItemProduction(LoadedStructure loadedStructure, Set<ItemStack> itemStackSet) {
@@ -429,7 +436,7 @@ public class StructureInventoryService {
         return false;
     }
 
-    private record StructAndInv(UUID structureId, Inventory inventory, Location location) {
+    public record StructAndInv(UUID structureId, Inventory inventory, Location location) {
     }
 
     private static class AmountAndModel {

@@ -86,6 +86,8 @@ public class TownyCivs extends JavaPlugin {
                     bind(StructureService.class);
                     bind(MechanicService.class);
                     bind(ItemService.class);
+                    bind(cz.neumimto.towny.townycivs.tutorial.TutorialManager.class);
+                    bind(cz.neumimto.towny.townycivs.tutorial.TutorialListener.class);
                 }
             });
         }
@@ -121,6 +123,7 @@ public class TownyCivs extends JavaPlugin {
 
             Bukkit.getPluginManager().registerEvents(injector.getInstance(TownListener.class), this);
             Bukkit.getPluginManager().registerEvents(injector.getInstance(InventoryListener.class), this);
+            Bukkit.getPluginManager().registerEvents(injector.getInstance(cz.neumimto.towny.townycivs.tutorial.TutorialListener.class), this);
         }
 
         injector.getInstance(ItemService.class).registerRecipes();

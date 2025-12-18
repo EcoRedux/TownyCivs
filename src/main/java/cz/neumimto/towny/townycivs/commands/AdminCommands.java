@@ -199,4 +199,68 @@ public class AdminCommands extends BaseCommand {
             target.sendMessage(ChatColor.GREEN + "You have received the Structure Edit tool!");
         }
     }
+
+    // ==================== Tutorial Commands ====================
+
+    @Inject
+    private cz.neumimto.towny.townycivs.tutorial.TutorialManager tutorialManager;
+
+    @Subcommand("tutorial start")
+    @Description("Start or restart the tutorial for your town")
+    public void onTutorialStart(Player player) {
+        com.palmergames.bukkit.towny.object.Resident resident = com.palmergames.bukkit.towny.TownyAPI.getInstance().getResident(player);
+        if (resident == null || !resident.hasTown()) {
+            player.sendMessage(ChatColor.RED + "You must be in a town to use this command.");
+            return;
+        }
+
+        if (!resident.isMayor()) {
+            player.sendMessage(ChatColor.RED + "Only the mayor can manage the tutorial.");
+            return;
+        }
+
+        com.palmergames.bukkit.towny.object.Town town = resident.getTownOrNull();
+        tutorialManager.resetTutorial(town, player);
+    }
+
+    @Subcommand("tutorial skip")
+    @Description("Skip the tutorial and unlock all commands")
+    public void onTutorialSkip(Player player) {
+        com.palmergames.bukkit.towny.object.Resident resident = com.palmergames.bukkit.towny.TownyAPI.getInstance().getResident(player);
+        if (resident == null || !resident.hasTown()) {
+            player.sendMessage(ChatColor.RED + "You must be in a town to use this command.");
+            return;
+        }
+
+        if (!resident.isMayor()) {
+            player.sendMessage(ChatColor.RED + "Only the mayor can manage the tutorial.");
+            return;
+        }
+
+        com.palmergames.bukkit.towny.object.Town town = resident.getTownOrNull();
+        tutorialManager.skipTutorial(town, player);
+    }
+
+    @Subcommand("tutorial status")
+    @Description("Check your tutorial progress")
+    public void onTutorialStatus(Player player) {
+        com.palmergames.bukkit.towny.object.Resident resident = com.palmergames.bukkit.towny.TownyAPI.getInstance().getResident(player);
+        if (resident == null || !resident.hasTown()) {
+            player.sendMessage(ChatColor.RED + "You must be in a town to use this command.");
+            return;
+        }
+
+        com.palmergames.bukkit.towny.object.Town town = resident.getTownOrNull();
+        cz.neumimto.towny.townycivs.tutorial.TutorialStep step = tutorialManager.getTutorialStep(town);
+
+        if (step == cz.neumimto.towny.townycivs.tutorial.TutorialStep.NOT_STARTED) {
+            player.sendMessage(ChatColor.YELLOW + "Tutorial has not been started for your town.");
+            player.sendMessage(ChatColor.GRAY + "Use /townycivs tutorial start to begin.");
+        } else if (step == cz.neumimto.towny.townycivs.tutorial.TutorialStep.COMPLETED) {
+            player.sendMessage(ChatColor.GREEN + "Tutorial is complete! All commands are unlocked.");
+        } else {
+            player.sendMessage(ChatColor.YELLOW + "Tutorial in progress: Step " + step.getStep() + "/14 - " + step.getName());
+            tutorialManager.showCurrentStep(player, town);
+        }
+    }
 }

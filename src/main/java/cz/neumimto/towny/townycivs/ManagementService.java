@@ -50,6 +50,9 @@ public class ManagementService {
     @Inject
     private TownService townService;
 
+    @Inject
+    private cz.neumimto.towny.townycivs.tutorial.TutorialManager tutorialManager;
+
     public EditSession startNewEditSession(Player player, Structure structure, Location location, BlueprintItem item) {
         Iterator<Map.Entry<PlayerBlueprintKey, EditSession>> it = editSessions.entrySet().iterator();
         while (it.hasNext()) {
@@ -274,6 +277,12 @@ public class ManagementService {
 
         TownyMessaging.sendPrefixedTownMessage(town, player.getName() + " placed " + structure.name + " at " + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ());
         Storage.scheduleSave(loadedStructure);
+
+        // Track tutorial progress - structure placed
+        com.palmergames.bukkit.towny.object.Resident resident = TownyAPI.getInstance().getResident(player);
+        if (resident != null && resident.isMayor()) {
+            tutorialManager.onStructurePlaced(town, player, structure.id);
+        }
     }
 
     private void refreshContainerLocations(LoadedStructure loadedStructure, Region lreg) {

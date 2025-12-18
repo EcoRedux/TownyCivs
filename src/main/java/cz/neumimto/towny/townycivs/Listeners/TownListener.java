@@ -4,9 +4,7 @@ import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyMessaging;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
-import com.palmergames.bukkit.towny.event.PreNewDayEvent;
-import com.palmergames.bukkit.towny.event.TownInvitePlayerEvent;
-import com.palmergames.bukkit.towny.event.TownUpkeepCalculationEvent;
+import com.palmergames.bukkit.towny.event.*;
 import com.palmergames.bukkit.towny.event.time.dailytaxes.PreTownPaysNationTaxEvent;
 import com.palmergames.bukkit.towny.event.town.TownLevelIncreaseEvent;
 import com.palmergames.bukkit.towny.listeners.TownyPaperEvents;
@@ -22,6 +20,7 @@ import cz.neumimto.towny.townycivs.gui.RegionGui;
 import cz.neumimto.towny.townycivs.model.BlueprintItem;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
+import cz.neumimto.towny.townycivs.tutorial.TutorialManager;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
@@ -78,9 +77,33 @@ public class TownListener implements Listener {
     @Inject
     private TownService townService;
 
+    @Inject
+    private TutorialManager tutorialManager;
+
     @EventHandler
     public void login(PlayerLoginEvent event) {
+        // Login event - tutorial reminder handled in join event
+    }
 
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        Resident resident = TownyAPI.getInstance().getResident(player);
+
+        if (resident == null || !resident.hasTown()) {
+            return;
+        }
+
+        if (!resident.isMayor()) {
+            return;
+        }
+
+        Town town = resident.getTownOrNull();
+        if (town != null) {
+            // Send tutorial reminder after a short delay so other join messages appear first
+            TownyCivs.MORE_PAPER_LIB.scheduling().entitySpecificScheduler(player)
+                .runDelayed(() -> tutorialManager.sendReminder(player, town), null, 40L);
+        }
     }
 
     @EventHandler
@@ -301,6 +324,73 @@ public class TownListener implements Listener {
         Player player = event.getPlayer();
         Block block = event.getBlock();
         handleBlockEditingWithinRegion(player, block, event);
+
+        // Tutorial: Check if build requirements are now satisfied after placing a block
+        if (!event.isCancelled()) {
+            checkTutorialBuildRequirements(player, block.getLocation());
+        }
+    }
+
+    /**
+     * Check if placing/breaking a block in a structure satisfies build requirements for tutorial
+     */
+    private void checkTutorialBuildRequirements(Player player, Location blockLocation) {
+        Resident resident = TownyAPI.getInstance().getResident(player);
+        if (resident == null || !resident.hasTown() || !resident.isMayor()) {
+            return;
+        }
+
+        Town town = resident.getTownOrNull();
+        if (town == null || !tutorialManager.isTutorialActive(town)) {
+            return;
+        }
+
+        cz.neumimto.towny.townycivs.tutorial.TutorialStep step = tutorialManager.getTutorialStep(town);
+        if (step != cz.neumimto.towny.townycivs.tutorial.TutorialStep.SATISFY_BUILD_REQUIREMENTS) {
+            return;
+        }
+
+        // Check if block is within a wheat farm structure
+        Optional<Region> regionOpt = subclaimService.regionAt(blockLocation);
+        if (regionOpt.isEmpty()) {
+            return;
+        }
+
+        Region region = regionOpt.get();
+        if (!region.structureId.toLowerCase().contains("wheat")) {
+            return;
+        }
+
+        // Check if build requirements are satisfied
+        LoadedStructure structure = region.loadedStructure;
+        if (structure.structureDef.buildRequirements == null || structure.structureDef.buildRequirements.isEmpty()) {
+            // No build requirements, advance tutorial
+            tutorialManager.onBuildRequirementsSatisfied(town, player);
+            return;
+        }
+
+        // Check all build requirements
+        cz.neumimto.towny.townycivs.mechanics.TownContext ctx = new cz.neumimto.towny.townycivs.mechanics.TownContext();
+        ctx.town = town;
+        ctx.player = player;
+        ctx.resident = resident;
+        ctx.structure = structure.structureDef;
+        ctx.loadedStructure = structure;
+
+        boolean allSatisfied = true;
+        for (var req : structure.structureDef.buildRequirements) {
+            @SuppressWarnings("unchecked")
+            cz.neumimto.towny.townycivs.mechanics.Mechanic<Object> mechanic =
+                (cz.neumimto.towny.townycivs.mechanics.Mechanic<Object>) req.mechanic;
+            if (!mechanic.check(ctx, req.configValue)) {
+                allSatisfied = false;
+                break;
+            }
+        }
+
+        if (allSatisfied) {
+            tutorialManager.onBuildRequirementsSatisfied(town, player);
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -318,6 +408,28 @@ public class TownListener implements Listener {
         //todo later to customize invites or block them based on certain conditions, like if max town size is reached theyre forced to build first a structure that increases max size
     }
 
+
+    /**
+     * Puts the mayor into a "Tutorial Mode" where they are guided through the TownyCivs mechanics
+     * Uses NewTownEvent to create metadata for tutorial tracking
+     */
+    @EventHandler
+    public void onTownCreate(NewTownEvent event) {
+        Town town = event.getTown();
+        tutorialManager.startTutorial(town);
+
+        Player mayor = town.getMayor().getPlayer();
+        if (mayor != null && mayor.isOnline()) {
+            // Send welcome message after a short delay
+            TownyCivs.MORE_PAPER_LIB.scheduling().entitySpecificScheduler(mayor)
+                .runDelayed(() -> tutorialManager.showCurrentStep(mayor, town), null, 20L);
+        }
+    }
+
+    @EventHandler
+    public void onTownClaim(TownClaimEvent event) {
+        tutorialManager.onTownClaim(event.getTown());
+    }
 
     private void handleBlockEditingWithinRegion(Player player, Block block, Cancellable event) {
         Resident resident = TownyAPI.getInstance().getResident(player);
@@ -349,3 +461,7 @@ public class TownListener implements Listener {
         }
     }
 }
+
+
+
+

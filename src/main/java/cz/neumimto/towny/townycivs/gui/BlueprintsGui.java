@@ -54,6 +54,9 @@ public class BlueprintsGui {
     @Inject
     private ManagementService managementService;
 
+    @Inject
+    private cz.neumimto.towny.townycivs.tutorial.TutorialManager tutorialManager;
+
     private GuiConfig guiConfig;
     private int itemsPerPage = 28;
     private List<int[]> contentSlots = new ArrayList<>();
@@ -62,6 +65,16 @@ public class BlueprintsGui {
     public void display(Player player) {
         BlueprintGuiSession session = BlueprintGuiSession.getSession(player.getUniqueId());
         loadConfigIfNeeded();
+
+        // Track tutorial progress - shop opened
+        com.palmergames.bukkit.towny.object.Resident resident = com.palmergames.bukkit.towny.TownyAPI.getInstance().getResident(player);
+        if (resident != null && resident.hasTown() && resident.isMayor()) {
+            com.palmergames.bukkit.towny.object.Town town = resident.getTownOrNull();
+            if (town != null) {
+                tutorialManager.onShopOpened(town, player);
+            }
+        }
+
         createAndShowGui(player, session);
     }
 
@@ -456,6 +469,12 @@ public class BlueprintsGui {
                 for (Map.Entry<Integer, ItemStack> e : noFitItems.entrySet()) {
                     whoClicked.getLocation().getWorld().dropItemNaturally(whoClicked.getLocation(), e.getValue());
                 }
+
+                // Track tutorial progress - blueprint purchased
+                if (townContext.resident != null && townContext.resident.isMayor()) {
+                    tutorialManager.onBlueprintPurchased(town, player, entry.structure.id);
+                }
+
                 // Refresh the GUI
                 BlueprintGuiSession session = BlueprintGuiSession.getSession(player.getUniqueId());
                 createAndShowGui(player, session);

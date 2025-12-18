@@ -50,11 +50,24 @@ public class RegionGui extends TCGui {
     @Inject
     private ManagementService managementService;
 
+    @Inject
+    private cz.neumimto.towny.townycivs.tutorial.TutorialManager tutorialManager;
+
     public RegionGui() {
         super("Region.conf", TownyCivs.INSTANCE.getDataFolder().toPath());
     }
 
     public void display(Player player, Region region) {
+        // Track tutorial progress - structure GUI opened
+        com.palmergames.bukkit.towny.object.Resident resident = TownyAPI.getInstance().getResident(player);
+        if (resident != null && resident.hasTown() && resident.isMayor()) {
+            com.palmergames.bukkit.towny.object.Town town = resident.getTownOrNull();
+            if (town != null) {
+                // Pass structure ID to detect if player already has a wheat farm
+                tutorialManager.onStructureGuiOpened(town, player, region.structureId);
+            }
+        }
+
         ChestGui chestGui = loadGui(player, region.uuid.toString());
         chestGui.show(player);
     }
