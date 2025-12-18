@@ -408,6 +408,16 @@ public class BlueprintsGui {
             lore.add(Component.text("Required Town Level: " + entry.requiredLevel, NamedTextColor.YELLOW));
         }
 
+        if (entry.buildCount >= entry.maxBuildCount) {
+            lore.add(Component.text("Max build count reached (" + entry.maxBuildCount + ")", NamedTextColor.RED));
+        } else if (entry.maxBuildCount != Integer.MAX_VALUE) {
+            lore.add(Component.text("Built: " + entry.buildCount + "/" + entry.maxBuildCount, NamedTextColor.GRAY));
+        } else {
+            lore.add(Component.text("Built: " + entry.buildCount, NamedTextColor.GRAY));
+        }
+
+
+
         meta.lore(lore);
         itemStack.setItemMeta(meta);
 
@@ -601,12 +611,14 @@ public class BlueprintsGui {
         final boolean canBuy;
         final int requiredLevel;
         final int buildCount;
+        final int maxBuildCount;
 
         StructureEntry(Structure structure, boolean canBuy, int requiredLevel, int buildCount) {
             this.structure = structure;
             this.canBuy = canBuy;
             this.requiredLevel = requiredLevel;
             this.buildCount = buildCount;
+            this.maxBuildCount = structure.maxCount != null ? structure.maxCount : Integer.MAX_VALUE;
         }
     }
 }

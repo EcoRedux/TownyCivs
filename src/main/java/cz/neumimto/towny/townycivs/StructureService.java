@@ -134,6 +134,15 @@ public class StructureService {
 
     public boolean canShow(TownContext context) {
         boolean pass = true;
+
+        // Check MaxCount limit
+        if (context.structure.maxCount != null) {
+            StructureAndCount structureAndCount = findTownStructureById(context.town, context.structure);
+            if (structureAndCount.count >= context.structure.maxCount) {
+                pass = false;
+            }
+        }
+
         for (Structure.LoadedPair<Mechanic<?>, ?> requirement : context.structure.buyRequirements) {
             Object configValue = requirement.configValue;
             var mechanic = (Mechanic<Object>) requirement.mechanic;
@@ -146,6 +155,16 @@ public class StructureService {
 
     public boolean canBuy(TownContext context) {
         boolean pass = true;
+
+        // Check MaxCount limit
+        if (context.structure.maxCount != null) {
+            StructureAndCount structureAndCount = findTownStructureById(context.town, context.structure);
+            if (structureAndCount.count >= context.structure.maxCount) {
+                context.player.sendMessage("§cYou have reached the maximum number of " + context.structure.name + " structures (" + context.structure.maxCount + ")");
+                pass = false;
+            }
+        }
+
         for (Structure.LoadedPair<Mechanic<?>, ?> requirement : context.structure.buyRequirements) {
             Object configValue = requirement.configValue;
             var mechanic = (Mechanic<Object>) requirement.mechanic;
