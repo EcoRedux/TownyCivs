@@ -201,24 +201,74 @@ public class RegionGui extends TCGui {
 
         // Check if structure has an upgrade path defined
         String upgradePath = townContext.loadedStructure.structureDef.upgradePath;
+        boolean canShowUpgrade = false;
+
         if (upgradePath != null && !upgradePath.isEmpty()) {
-            upgrade = new ItemStack(Material.DIAMOND);
-            upgrade.editMeta(itemMeta -> {
-                itemMeta.displayName(mm.deserialize("<green>Upgrade your structure</green>"));
-                var lore = new ArrayList<Component>();
-                lore.add(mm.deserialize("<gray>Upgrades to: <aqua>" + upgradePath + "</aqua></gray>"));
-                lore.add(Component.empty());
-                lore.add(mm.deserialize("<gray>Left-click: View upgrade requirements</gray>"));
-                lore.add(mm.deserialize("<gray>Right-click: Confirm upgrade</gray>"));
-                itemMeta.lore(lore);
-            });
+            // Check if upgrade chain already exceeds base structure MaxCount
+            Structure baseStructure = townContext.loadedStructure.structureDef;
+            Integer baseMaxCount = baseStructure.maxCount;
+
+            // Also check target structure MaxCount
+            var targetStructureOpt = configurationService.findStructureById(upgradePath);
+
+            boolean blockedByCount = false;
+
+            if (baseMaxCount != null && baseMaxCount > 0) {
+                int currentChainCount = structureService.countStructuresInUpgradeChain(town, baseStructure);
+                if (currentChainCount >= baseMaxCount) {
+                    blockedByCount = true;
+                }
+            }
+
+            // Check target structure MaxCount
+            if (!blockedByCount && targetStructureOpt.isPresent()) {
+                Structure targetStructure = targetStructureOpt.get();
+                if (targetStructure.maxCount != null && targetStructure.maxCount > 0) {
+                    int targetCount = structureService.findTownStructureById(town, targetStructure).count;
+                    if (targetCount >= targetStructure.maxCount) {
+                        blockedByCount = true;
+                    }
+                }
+            }
+
+            canShowUpgrade = !blockedByCount;
+
+            if (canShowUpgrade) {
+                upgrade = new ItemStack(Material.DIAMOND);
+                upgrade.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<green>Upgrade your structure</green>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<gray>Upgrades to: <aqua>" + upgradePath + "</aqua></gray>"));
+                    lore.add(Component.empty());
+                    lore.add(mm.deserialize("<gray>Left-click: View upgrade requirements</gray>"));
+                    lore.add(mm.deserialize("<gray>Right-click: Confirm upgrade</gray>"));
+                    itemMeta.lore(lore);
+                });
+            } else {
+                // Show blocked upgrade button
+                upgrade = new ItemStack(Material.BARRIER);
+                upgrade.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<red>Cannot Upgrade</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<gray>Upgrades to: <aqua>" + upgradePath + "</aqua></gray>"));
+                    lore.add(Component.empty());
+                    lore.add(mm.deserialize("<red>Maximum build count reached!</red>"));
+                    lore.add(mm.deserialize("<gray>You have too many upgraded structures.</gray>"));
+                    itemMeta.lore(lore);
+                });
+            }
         }
 
+        final boolean finalCanShowUpgrade = canShowUpgrade;
         map.put("Upgrade", List.of(new GuiCommand(upgrade, e -> {
             e.setCancelled(true);
             String path = townContext.loadedStructure.structureDef.upgradePath;
             if (path == null || path.isEmpty()) {
                 return; // No upgrade path defined
+            }
+            if (!finalCanShowUpgrade) {
+                player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Cannot upgrade: Maximum build count reached for this upgrade chain!</red>"));
+                return;
             }
             if(e.isLeftClick()){
                 ChestGui chestGui = upgradeRequirementsGui(region, townContext);
