@@ -50,11 +50,11 @@ public class Structure {
     public List<LoadedPair<Mechanic<?>, ?>> buyRequirements;
 
     @Path("PlaceRequirements")
-    @Conversion(BuyReq.class)
+    @Conversion(BuildReq.class)
     public List<LoadedPair<Mechanic<?>, ?>> placeRequirements;
 
     @Path("BuildRequirements")
-    @Conversion(BuyReq.class)
+    @Conversion(BuildReq.class)
     public List<LoadedPair<Mechanic<?>, ?>> buildRequirements;
 
     @Path("UpgradeRequirements")

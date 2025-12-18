@@ -154,6 +154,30 @@ public class ManagementService {
                 }
             }
 
+            if (editSession.structure.placeRequirements != null && !editSession.structure.placeRequirements.isEmpty()) {
+                cz.neumimto.towny.townycivs.mechanics.TownContext townContext = new cz.neumimto.towny.townycivs.mechanics.TownContext();
+                townContext.town = town;
+                townContext.player = player;
+                townContext.resident = TownyAPI.getInstance().getResident(player);
+                townContext.structure = editSession.structure;
+                townContext.structureCenterLocation = location;
+
+                boolean allMet = true;
+                for (Structure.LoadedPair<cz.neumimto.towny.townycivs.mechanics.Mechanic<?>, ?> requirement : editSession.structure.placeRequirements) {
+                    @SuppressWarnings("unchecked")
+                    cz.neumimto.towny.townycivs.mechanics.Mechanic<Object> mechanic = (cz.neumimto.towny.townycivs.mechanics.Mechanic<Object>) requirement.mechanic;
+                    boolean checkResult = mechanic.check(townContext, requirement.configValue);
+                    if (!checkResult) {
+                        mechanic.nokmessage(townContext, requirement.configValue);
+                        allMet = false;
+                    }
+                }
+
+                if (!allMet) {
+                    return;
+                }
+            }
+
             if (moveTo(player, editSession.center, item)) {
                 placeBlueprint(player, editSession.center, editSession.structure);
                 if (editSession.currentStructureBorder != null) {
