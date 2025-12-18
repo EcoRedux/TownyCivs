@@ -21,6 +21,7 @@ public class MechanicService {
     private Map<String, Mechanic> placeReq = new HashMap<>();
 
     private Map<String, Mechanic> prodMech = new HashMap<>();
+    private Map<String, Mechanic> upgradeReq = new HashMap<>();
 
     public void buyReq(Mechanic mech) {
         buyReqs.put(mech.id().toLowerCase(Locale.ROOT), mech);
@@ -30,6 +31,9 @@ public class MechanicService {
         productionReq.put(mech.id().toLowerCase(Locale.ROOT), mech);
     }
 
+    public void upgradeReq(Mechanic mech) {
+        upgradeReq.put(mech.id().toLowerCase(Locale.ROOT), mech);
+    }
     public void registerDefaults() {
         productionReq.clear();
         buyReqs.clear();
@@ -39,6 +43,7 @@ public class MechanicService {
         buyReq(new Permission());
         buyReq(new Price());
         buyReq(new TownRank());
+        buyReq(new Experience());
         buyReq(injector.getInstance(MStructure.class));
 
         prodReq(new Price());
@@ -53,7 +58,17 @@ public class MechanicService {
         placeReq(new TownRank());
         placeReq(injector.getInstance(MStructure.class));
 
+        upgradeReq(new Permission());
+        upgradeReq(new Price());
+        upgradeReq(new TownRank());
+        upgradeReq(new TownUpkeep());
+        upgradeReq(new ItemUpkeep());
+        upgradeReq(new Experience());
+
+
+
         prodMech(new ItemProduction());
+        prodMech(new MoneyProduction());
 
 
         Bukkit.getPluginManager().callEvent(new RegisterMechanicEvent(this));

@@ -15,6 +15,7 @@ import cz.neumimto.towny.townycivs.model.StructureAndCount;
 import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -230,6 +231,108 @@ public class StructureService {
         }
         return Optional.empty();
     }
+
+    /**
+     * Changes a structure from one type to another (e.g., coal_mine -> coal_mine_2)
+     * Updates the structure in memory and saves to flatfile
+     *
+     * @param loadedStructure The Loaded Structure for the UUID to change
+     * @param newStructureId The ID of the new structure type
+     * @return true if successful, false otherwise
+     */
+    public boolean changeStructure(LoadedStructure loadedStructure, String newStructureId) {
+        // Find existing structure
+        LoadedStructure oldStructure = loadedStructure;
+        if (oldStructure == null) {
+            return false;
+        }
+
+        UUID structureUUID = oldStructure.uuid;
+
+        // Find new structure definition
+        Optional<Structure> newStructureDef = configurationService.findStructureById(newStructureId);
+        if (newStructureDef.isEmpty()) {
+            return false;
+        }
+
+        Structure newStructure = newStructureDef.get();
+
+        // Remove old region
+        Region oldRegion = subclaimService.getRegion(oldStructure);
+        if (oldRegion != null) {
+            subclaimService.delete(oldRegion);
+        }
+
+        // Create new LoadedStructure with same UUID and location
+        LoadedStructure newLoadedStructure = new LoadedStructure(
+                oldStructure.uuid,
+                oldStructure.town,
+                newStructureId,
+                oldStructure.center,
+                newStructure
+        );
+
+        // Preserve state
+        newLoadedStructure.editMode.set(oldStructure.editMode.get());
+        newLoadedStructure.lastTickTime = oldStructure.lastTickTime;
+
+        // Transfer inventory if new structure supports it
+        if (newStructure.inventorySize > 0) {
+            // Transfer container locations
+            newLoadedStructure.containerLocations.addAll(oldStructure.containerLocations);
+
+            // Recreate inventories with new structure name/title
+            for (Map.Entry<Location, org.bukkit.inventory.Inventory> entry : oldStructure.inventory.entrySet()) {
+                Location containerLoc = entry.getKey();
+                org.bukkit.inventory.Inventory oldInv = entry.getValue();
+
+                // Create new inventory with updated structure name
+                org.bukkit.inventory.Inventory newInv = org.bukkit.Bukkit.getServer().createInventory(
+                    null,
+                    newStructure.inventorySize,
+                    net.kyori.adventure.text.Component.text(newStructure.name)
+                );
+
+                // Transfer items from old inventory to new inventory
+                ItemStack[] oldContents = oldInv.getContents();
+                for (int i = 0; i < Math.min(oldContents.length, newStructure.inventorySize); i++) {
+                    if (oldContents[i] != null) {
+                        newInv.setItem(i, oldContents[i].clone());
+                    }
+                }
+
+                // Add inventory blocker items if new inventory is smaller
+                if (newStructure.inventorySize < 27) {
+                    ItemStack blocker = TownyCivs.injector.getInstance(ItemService.class).getInventoryBlocker();
+                    for (int i = newStructure.inventorySize; i < 27; i++) {
+                        newInv.setItem(i, blocker);
+                    }
+                }
+
+                // Store new inventory
+                newLoadedStructure.inventory.put(containerLoc, newInv);
+            }
+        }
+
+        // Update in memory
+        structures.put(structureUUID, newLoadedStructure);
+
+        Set<LoadedStructure> townStructures = structuresByTown.get(oldStructure.town);
+        if (townStructures != null) {
+            townStructures.remove(oldStructure);
+            townStructures.add(newLoadedStructure);
+        }
+
+        // Create and register new region
+        Optional<Region> newRegion = subclaimService.createRegion(newLoadedStructure);
+        newRegion.ifPresent(region -> subclaimService.registerRegion(region, newLoadedStructure));
+
+        // Save to flatfile
+        Storage.scheduleSave(newLoadedStructure);
+
+        return true;
+    }
+
 
     public Optional<BoundingBox> getStructureBoundingBox(LoadedStructure loadedStructure) {
         Region region = subclaimService.getRegion(loadedStructure);

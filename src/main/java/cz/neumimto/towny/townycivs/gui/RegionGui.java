@@ -77,6 +77,8 @@ public class RegionGui extends TCGui {
         Map<String, List<GuiCommand>> map = new HashMap<>();
         TownContext townContext = new TownContext();
         townContext.town = town;
+        townContext.player = player;
+        townContext.resident = TownyAPI.getInstance().getResident(player);
         Region region = subclaimService.getRegion(UUID.fromString(param));
         townContext.structure = region.loadedStructure.structureDef;
         townContext.loadedStructure = region.loadedStructure;
@@ -193,6 +195,38 @@ public class RegionGui extends TCGui {
                 chestGui.show(e.getWhoClicked());
             }
 
+        })));
+
+        ItemStack upgrade = new ItemStack(Material.AIR);
+
+        // Check if structure has an upgrade path defined
+        String upgradePath = townContext.loadedStructure.structureDef.upgradePath;
+        if (upgradePath != null && !upgradePath.isEmpty()) {
+            upgrade = new ItemStack(Material.DIAMOND);
+            upgrade.editMeta(itemMeta -> {
+                itemMeta.displayName(mm.deserialize("<green>Upgrade your structure</green>"));
+                var lore = new ArrayList<Component>();
+                lore.add(mm.deserialize("<gray>Upgrades to: <aqua>" + upgradePath + "</aqua></gray>"));
+                lore.add(Component.empty());
+                lore.add(mm.deserialize("<gray>Left-click: View upgrade requirements</gray>"));
+                lore.add(mm.deserialize("<gray>Right-click: Confirm upgrade</gray>"));
+                itemMeta.lore(lore);
+            });
+        }
+
+        map.put("Upgrade", List.of(new GuiCommand(upgrade, e -> {
+            e.setCancelled(true);
+            String path = townContext.loadedStructure.structureDef.upgradePath;
+            if (path == null || path.isEmpty()) {
+                return; // No upgrade path defined
+            }
+            if(e.isLeftClick()){
+                ChestGui chestGui = upgradeRequirementsGui(region, townContext);
+                chestGui.show(e.getWhoClicked());
+            } else if(e.isRightClick()){
+                ChestGui chestGui = confirmUpgradeGui(region, townContext);
+                chestGui.show(e.getWhoClicked());
+            }
         })));
 
         return map;
@@ -433,6 +467,311 @@ public class RegionGui extends TCGui {
                 y++;
             }
         }
+        return chestGui;
+    }
+
+    /**
+     * Shows upgrade requirements GUI - displays what is needed to upgrade
+     */
+    private ChestGui upgradeRequirementsGui(Region region, TownContext townContext) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        ChestGui chestGui = new ChestGui(4, "Upgrade Requirements");
+
+        StaticPane staticPane = new StaticPane(9, 4);
+        chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            display((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
+        // Title item showing upgrade target
+        String upgradePath = townContext.loadedStructure.structureDef.upgradePath;
+        var targetStructure = configurationService.findStructureById(upgradePath);
+        String targetName = targetStructure.map(s -> s.name).orElse(upgradePath);
+
+        ItemStack titleItem = new ItemStack(Material.NETHER_STAR);
+        titleItem.editMeta(meta -> {
+            meta.displayName(mm.deserialize("<gold>Upgrade Requirements</gold>"));
+            var lore = new ArrayList<Component>();
+            lore.add(mm.deserialize("<gray>Current: <white>" + townContext.structure.name + "</white></gray>"));
+            lore.add(mm.deserialize("<gray>Upgrades to: <aqua>" + targetName + "</aqua></gray>"));
+            lore.add(Component.empty());
+            lore.add(mm.deserialize("<yellow>Requirements listed below:</yellow>"));
+            meta.lore(lore);
+        });
+        staticPane.addItem(new GuiItem(titleItem, e -> e.setCancelled(true)), 4, 0);
+
+        int x = 0;
+        int y = 1;
+
+        List<Structure.LoadedPair<Mechanic<?>, ?>> upgradeReqs = townContext.loadedStructure.structureDef.upgradeRequirements;
+
+        // Handle null or empty requirements
+        if (upgradeReqs == null) {
+            upgradeReqs = new ArrayList<>();
+        }
+
+        for (Structure.LoadedPair<Mechanic<?>, ?> req : upgradeReqs) {
+            String mechanicId = req.mechanic.id();
+
+            // Skip the upgrade mechanic since we now use upgradePath field
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPGRADE)) {
+                continue;
+            }
+
+            @SuppressWarnings("unchecked")
+            Mechanic<Object> mechanic = (Mechanic<Object>) req.mechanic;
+            boolean isMet = mechanic.check(townContext, req.configValue);
+
+            ItemStack reqItem;
+
+            // Price requirement
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.PRICE)) {
+                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper price =
+                    (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) req.configValue;
+
+                reqItem = new ItemStack(isMet ? Material.GOLD_INGOT : Material.COAL);
+                reqItem.editMeta(meta -> {
+                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Price</green>" : "<red>✗ Price</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Cost: $" + price.value + "</yellow>"));
+                    double balance = townContext.town.getAccount().getHoldingBalance();
+                    lore.add(mm.deserialize("<gray>Town Balance: $" + String.format("%.2f", balance) + "</gray>"));
+                    lore.add(isMet ? mm.deserialize("<green>Requirement met!</green>") : mm.deserialize("<red>Not enough funds!</red>"));
+                    meta.lore(lore);
+                });
+            }
+            // Town level requirement
+            else if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_RANK) ||
+                     mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_RANK_REQUIREMENT)) {
+                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper level =
+                    (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) req.configValue;
+
+                reqItem = new ItemStack(isMet ? Material.EXPERIENCE_BOTTLE : Material.GLASS_BOTTLE);
+                reqItem.editMeta(meta -> {
+                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Town Level</green>" : "<red>✗ Town Level</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Required Level: " + (int) level.value + "</yellow>"));
+                    lore.add(isMet ? mm.deserialize("<green>Requirement met!</green>") : mm.deserialize("<red>Town level too low!</red>"));
+                    meta.lore(lore);
+                });
+            }
+            // Permission requirement
+            else if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.PERMISSION)) {
+                cz.neumimto.towny.townycivs.mechanics.common.StringWrapper perm =
+                    (cz.neumimto.towny.townycivs.mechanics.common.StringWrapper) req.configValue;
+
+                reqItem = new ItemStack(isMet ? Material.NAME_TAG : Material.BARRIER);
+                reqItem.editMeta(meta -> {
+                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Permission</green>" : "<red>✗ Permission</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Required: " + perm.value + "</yellow>"));
+                    lore.add(isMet ? mm.deserialize("<green>You have permission!</green>") : mm.deserialize("<red>Missing permission!</red>"));
+                    meta.lore(lore);
+                });
+            }
+            // Structure requirement
+            else if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.STRUCTURE)) {
+                cz.neumimto.towny.townycivs.mechanics.common.StringWrapper structureReq =
+                    (cz.neumimto.towny.townycivs.mechanics.common.StringWrapper) req.configValue;
+
+                reqItem = new ItemStack(isMet ? Material.SMITHING_TABLE : Material.CRAFTING_TABLE);
+                reqItem.editMeta(meta -> {
+                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Structure Required</green>" : "<red>✗ Structure Required</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Requires: " + structureReq.value + "</yellow>"));
+                    lore.add(isMet ? mm.deserialize("<green>Structure exists!</green>") : mm.deserialize("<red>Build this structure first!</red>"));
+                    meta.lore(lore);
+                });
+            }
+            // Generic mechanic
+            else {
+                reqItem = new ItemStack(isMet ? Material.LIME_DYE : Material.RED_DYE);
+                reqItem.editMeta(meta -> {
+                    meta.displayName(mm.deserialize(isMet ? "<green>✓ " + mechanicId + "</green>" : "<red>✗ " + mechanicId + "</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<gray>Mechanic: " + mechanicId + "</gray>"));
+                    lore.add(isMet ? mm.deserialize("<green>Requirement met!</green>") : mm.deserialize("<red>Requirement not met!</red>"));
+                    meta.lore(lore);
+                });
+            }
+
+            staticPane.addItem(new GuiItem(reqItem, e -> e.setCancelled(true)), x, y);
+            x++;
+            if (x == 9) {
+                x = 0;
+                y++;
+            }
+        }
+
+        // Confirm button in bottom-right if all requirements met
+        boolean allMet = true;
+        for (Structure.LoadedPair<Mechanic<?>, ?> req : upgradeReqs) {
+            @SuppressWarnings("unchecked")
+            Mechanic<Object> mechanic = (Mechanic<Object>) req.mechanic;
+            if (!mechanic.check(townContext, req.configValue)) {
+                allMet = false;
+                System.out.println("Requirement not met: " + mechanic.id());
+                break;
+            }
+        }
+
+        if (allMet) {
+            ItemStack confirmBtn = new ItemStack(Material.EMERALD_BLOCK);
+            confirmBtn.editMeta(meta -> {
+                meta.displayName(mm.deserialize("<green><bold>Click to Upgrade!</bold></green>"));
+                var lore = new ArrayList<Component>();
+                lore.add(mm.deserialize("<gray>All requirements met!</gray>"));
+                lore.add(mm.deserialize("<yellow>Click to proceed with upgrade.</yellow>"));
+                meta.lore(lore);
+            });
+            staticPane.addItem(new GuiItem(confirmBtn, e -> {
+                e.setCancelled(true);
+                ChestGui confirmGui = confirmUpgradeGui(region, townContext);
+                confirmGui.show(e.getWhoClicked());
+            }), 8, 3);
+        } else {
+            ItemStack notReadyBtn = new ItemStack(Material.REDSTONE_BLOCK);
+            notReadyBtn.editMeta(meta -> {
+                meta.displayName(mm.deserialize("<red>Cannot Upgrade</red>"));
+                var lore = new ArrayList<Component>();
+                lore.add(mm.deserialize("<gray>Not all requirements are met.</gray>"));
+                lore.add(mm.deserialize("<yellow>Complete the requirements above.</yellow>"));
+                meta.lore(lore);
+            });
+            staticPane.addItem(new GuiItem(notReadyBtn, e -> e.setCancelled(true)), 8, 3);
+        }
+
+        return chestGui;
+    }
+
+    /**
+     * Shows confirmation GUI for upgrading the structure
+     */
+    private ChestGui confirmUpgradeGui(Region region, TownContext townContext) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        ChestGui chestGui = new ChestGui(3, "Confirm Upgrade");
+
+        StaticPane staticPane = new StaticPane(9, 3);
+        chestGui.addPane(staticPane);
+
+        // Get upgrade path from structure config
+        String upgradeTargetId = townContext.loadedStructure.structureDef.upgradePath;
+
+        // Check if all requirements are met
+        List<Structure.LoadedPair<Mechanic<?>, ?>> upgradeReqs = townContext.loadedStructure.structureDef.upgradeRequirements;
+        if (upgradeReqs == null) {
+            upgradeReqs = new ArrayList<>();
+        }
+
+        boolean allMet = true;
+        for (Structure.LoadedPair<Mechanic<?>, ?> req : upgradeReqs) {
+            // Skip the upgrade mechanic since we now use upgradePath
+            if (req.mechanic.id().equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPGRADE)) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Mechanic<Object> mechanic = (Mechanic<Object>) req.mechanic;
+            if (!mechanic.check(townContext, req.configValue)) {
+                allMet = false;
+            }
+        }
+
+        final String finalUpgradeTargetId = upgradeTargetId;
+        final boolean canUpgrade = allMet && upgradeTargetId != null && !upgradeTargetId.isEmpty();
+        final List<Structure.LoadedPair<Mechanic<?>, ?>> finalUpgradeReqs = upgradeReqs;
+
+        // Info item in the middle
+        var targetStructure = upgradeTargetId != null ? configurationService.findStructureById(upgradeTargetId) : Optional.<Structure>empty();
+        String targetName = targetStructure.map(s -> s.name).orElse(upgradeTargetId != null ? upgradeTargetId : "Unknown");
+
+        ItemStack infoItem = new ItemStack(Material.NETHER_STAR);
+        infoItem.editMeta(meta -> {
+            meta.displayName(mm.deserialize("<gold>Upgrade Confirmation</gold>"));
+            var lore = new ArrayList<Component>();
+            lore.add(Component.empty());
+            lore.add(mm.deserialize("<gray>Current: <white>" + townContext.structure.name + "</white></gray>"));
+            lore.add(mm.deserialize("<gray>Upgrade to: <aqua>" + targetName + "</aqua></gray>"));
+            lore.add(Component.empty());
+            if (canUpgrade) {
+                lore.add(mm.deserialize("<green>All requirements met!</green>"));
+            } else {
+                lore.add(mm.deserialize("<red>Requirements not met!</red>"));
+            }
+            meta.lore(lore);
+        });
+        staticPane.addItem(new GuiItem(infoItem, e -> e.setCancelled(true)), 4, 0);
+
+        // Cancel button (left side)
+        ItemStack cancelBtn = new ItemStack(Material.RED_WOOL);
+        cancelBtn.editMeta(meta -> {
+            meta.displayName(mm.deserialize("<red><bold>Cancel</bold></red>"));
+            var lore = new ArrayList<Component>();
+            lore.add(mm.deserialize("<gray>Go back without upgrading.</gray>"));
+            meta.lore(lore);
+        });
+        staticPane.addItem(new GuiItem(cancelBtn, e -> {
+            e.setCancelled(true);
+            display((Player) e.getWhoClicked(), region);
+        }), 2, 1);
+
+        // Confirm button (right side)
+        if (canUpgrade) {
+            ItemStack confirmBtn = new ItemStack(Material.LIME_WOOL);
+            confirmBtn.editMeta(meta -> {
+                meta.displayName(mm.deserialize("<green><bold>Confirm Upgrade</bold></green>"));
+                var lore = new ArrayList<Component>();
+                lore.add(mm.deserialize("<gray>Click to upgrade your structure!</gray>"));
+                lore.add(Component.empty());
+                lore.add(mm.deserialize("<yellow>This action cannot be undone.</yellow>"));
+                meta.lore(lore);
+            });
+            staticPane.addItem(new GuiItem(confirmBtn, e -> {
+                e.setCancelled(true);
+                Player player = (Player) e.getWhoClicked();
+
+                // Execute post actions (withdraw money, etc.) - skip upgrade mechanic
+                for (Structure.LoadedPair<Mechanic<?>, ?> req : finalUpgradeReqs) {
+                    if (req.mechanic.id().equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPGRADE)) {
+                        continue;
+                    }
+                    @SuppressWarnings("unchecked")
+                    Mechanic<Object> mechanic = (Mechanic<Object>) req.mechanic;
+                    mechanic.postAction(townContext, req.configValue);
+                    mechanic.okmessage(townContext, req.configValue);
+                }
+
+                // Perform the upgrade
+                boolean success = structureService.changeStructure(townContext.loadedStructure, finalUpgradeTargetId);
+
+                if (success) {
+                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <green>Structure upgraded successfully to " + targetName + "!</green>"));
+                    player.closeInventory();
+                } else {
+                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Failed to upgrade structure. Please try again.</red>"));
+                    display(player, region);
+                }
+            }), 6, 1);
+        } else {
+            ItemStack disabledBtn = new ItemStack(Material.GRAY_WOOL);
+            disabledBtn.editMeta(meta -> {
+                meta.displayName(mm.deserialize("<gray><bold>Cannot Upgrade</bold></gray>"));
+                var lore = new ArrayList<Component>();
+                lore.add(mm.deserialize("<red>Requirements not met!</red>"));
+                lore.add(mm.deserialize("<gray>Left-click the upgrade button to see requirements.</gray>"));
+                meta.lore(lore);
+            });
+            staticPane.addItem(new GuiItem(disabledBtn, e -> {
+                e.setCancelled(true);
+                ChestGui reqGui = upgradeRequirementsGui(region, townContext);
+                reqGui.show(e.getWhoClicked());
+            }), 6, 1);
+        }
+
         return chestGui;
     }
 

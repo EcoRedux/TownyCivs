@@ -51,6 +51,13 @@ public class Structure {
     @Conversion(BuyReq.class)
     public List<LoadedPair<Mechanic<?>, ?>> buildRequirements;
 
+    @Path("UpgradeRequirements")
+    @Conversion(BuyReq.class)
+    public List<LoadedPair<Mechanic<?>, ?>> upgradeRequirements;
+
+    @Path("UpgradePath")
+    public String upgradePath;
+
     @Path("Upkeep")
     @Conversion(Upkeep.class)
     public List<LoadedPair<Mechanic<Object>, Object>> upkeep;

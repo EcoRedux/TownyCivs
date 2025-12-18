@@ -141,7 +141,6 @@ public class FoliaScheduler implements Runnable, Listener {
         structure.unsavedTickCount++;
         if (structure.unsavedTickCount % structure.structureDef.saveEachNTicks == 0 || forceSaveNextTick.contains(structure.uuid)) {
             if (!inventoryService.anyInventoryIsBeingAccessed(structure)) {
-                System.out.println("saving structure " + structure.uuid + " " + structure.structureDef.name + " after " + structure.unsavedTickCount + " ticks");
                 Storage.scheduleSave(structure);
                 structure.unsavedTickCount = 0;
                 forceSaveNextTick.remove(structure.uuid);
