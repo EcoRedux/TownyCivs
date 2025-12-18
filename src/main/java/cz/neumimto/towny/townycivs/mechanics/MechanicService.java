@@ -43,7 +43,7 @@ public class MechanicService {
 
         prodReq(new Price());
         prodReq(new ItemUpkeep());
-        prodReq(new MoneyUpkeep());
+        prodReq(new TownUpkeep());
 
         placeReq(new Permission());
         placeReq(new Biome());

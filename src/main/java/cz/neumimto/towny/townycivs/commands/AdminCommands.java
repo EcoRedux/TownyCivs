@@ -82,7 +82,6 @@ public class AdminCommands extends BaseCommand {
         helpMenu2Gui.reloadGuiConfig();
         regionGui.reloadGuiConfig();
         structureGui.reloadGuiConfig();
-        structuresGui.reloadGuiConfig();
 
         TownyCivs.logger.info("Reloaded all GUI configurations");
 

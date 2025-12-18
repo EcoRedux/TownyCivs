@@ -1,12 +1,14 @@
 package cz.neumimto.towny.townycivs.gui;
 
+import com.electronwill.nightconfig.core.conversion.ObjectConverter;
+import com.electronwill.nightconfig.core.file.FileConfig;
+import com.electronwill.nightconfig.hocon.HoconParser;
 import com.github.stefvanschie.inventoryframework.adventuresupport.ComponentHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.AnvilGui;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
-import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
-import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.object.Town;
 import cz.neumimto.towny.townycivs.ManagementService;
@@ -14,6 +16,7 @@ import cz.neumimto.towny.townycivs.StructureService;
 import cz.neumimto.towny.townycivs.TownyCivs;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.config.Structure;
+import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.Mechanics;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
@@ -29,14 +32,18 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Singleton
 public class BlueprintsGui {
 
-    private static final int ITEMS_PER_PAGE = 28; // 7x4 grid (slots 1-7 on rows 2-5)
-    private static final int GUI_ROWS = 6;
+    private static final String CONFIG_FILE = "BuyBlueprints.conf";
 
     @Inject
     private StructureService structureService;
@@ -47,8 +54,14 @@ public class BlueprintsGui {
     @Inject
     private ManagementService managementService;
 
+    private GuiConfig guiConfig;
+    private int itemsPerPage = 28;
+    private List<int[]> contentSlots = new ArrayList<>();
+    private Map<String, int[]> controlSlots = new HashMap<>();
+
     public void display(Player player) {
         BlueprintGuiSession session = BlueprintGuiSession.getSession(player.getUniqueId());
+        loadConfigIfNeeded();
         createAndShowGui(player, session);
     }
 
@@ -57,6 +70,7 @@ public class BlueprintsGui {
      */
     public void clearCache() {
         BlueprintGuiSession.clearAllSessions();
+        guiConfig = null;
     }
 
     /**
@@ -71,9 +85,97 @@ public class BlueprintsGui {
      * this method just clears all sessions to reset player state.
      */
     public void reloadGuiConfig() {
-        // This GUI is dynamically generated, no config file to reload
-        // Just clear sessions so players get fresh state
-        clearCache();
+        guiConfig = null;
+        loadConfigIfNeeded();
+    }
+
+    private void loadConfigIfNeeded() {
+        if (guiConfig != null) return;
+
+        Path configPath = TownyCivs.INSTANCE.getDataFolder().toPath().resolve("guis/" + CONFIG_FILE);
+
+        try {
+            if (!Files.exists(configPath)) {
+                Path parentDir = configPath.getParent();
+                if (parentDir != null && !Files.exists(parentDir)) {
+                    Files.createDirectories(parentDir);
+                }
+
+                try (InputStream is = getClass().getClassLoader().getResourceAsStream("gui/" + CONFIG_FILE)) {
+                    if (is != null) {
+                        String content = new String(is.readAllBytes());
+                        Files.writeString(configPath, content);
+                    }
+                }
+            }
+
+            if (Files.exists(configPath)) {
+                try (FileConfig fileConfig = FileConfig.of(configPath)) {
+                    fileConfig.load();
+                    guiConfig = new ObjectConverter().toObject(fileConfig, GuiConfig::new);
+                }
+            } else {
+                try (InputStream is = getClass().getClassLoader().getResourceAsStream("gui/" + CONFIG_FILE)) {
+                    if (is != null) {
+                        String content = new String(is.readAllBytes());
+                        HoconParser parser = new HoconParser();
+                        try (StringReader reader = new StringReader(content)) {
+                            guiConfig = new ObjectConverter().toObject(parser.parse(reader), GuiConfig::new);
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            TownyCivs.logger.severe("Failed to load Blueprints GUI config: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        if (guiConfig != null) {
+            parseLayout();
+        }
+    }
+
+    private void parseLayout() {
+        contentSlots.clear();
+        controlSlots.clear();
+
+        if (guiConfig == null || guiConfig.inventory == null) return;
+
+        Map<Character, String> charToSupplier = new HashMap<>();
+        if (guiConfig.mask != null) {
+            for (GuiConfig.MaskConfig mask : guiConfig.mask) {
+                if (mask.C != null && !mask.C.isEmpty() && mask.supplier != null) {
+                    charToSupplier.put(mask.C.charAt(0), mask.supplier);
+                }
+            }
+        }
+
+        for (int row = 0; row < guiConfig.inventory.size(); row++) {
+            String rowStr = guiConfig.inventory.get(row);
+            for (int col = 0; col < rowStr.length(); col++) {
+                char c = rowStr.charAt(col);
+                String supplier = charToSupplier.get(c);
+
+                if (supplier != null) {
+                    switch (supplier.toLowerCase()) {
+                        case "blueprint":
+                            contentSlots.add(new int[]{col, row});
+                            break;
+                        case "return":
+                        case "back":
+                        case "next":
+                        case "search":
+                        case "clearsearch":
+                        case "toggle":
+                        case "pageinfo":
+                            controlSlots.put(supplier.toLowerCase(), new int[]{col, row});
+                            break;
+                    }
+                }
+            }
+        }
+
+        itemsPerPage = contentSlots.size();
     }
 
     private void createAndShowGui(Player player, BlueprintGuiSession session) {
@@ -89,81 +191,122 @@ public class BlueprintsGui {
             return;
         }
 
-        // Get and filter/sort structures
         List<StructureEntry> structures = getFilteredAndSortedStructures(player, town, session);
+        int totalPages = Math.max(1, (int) Math.ceil((double) structures.size() / Math.max(1, itemsPerPage)));
 
-        int totalPages = Math.max(1, (int) Math.ceil((double) structures.size() / ITEMS_PER_PAGE));
-
-        // Ensure current page is valid
         if (session.getCurrentPage() >= totalPages) {
-            session.setCurrentPage(totalPages - 1);
+            session.setCurrentPage(Math.max(0, totalPages - 1));
         }
 
-        // Create title
+        int guiRows = guiConfig != null ? guiConfig.inventory.size() : 6;
         String title = createTitle(town, session, totalPages);
-        ChestGui gui = new ChestGui(GUI_ROWS, ComponentHolder.of(MiniMessage.miniMessage().deserialize(title)));
+        ChestGui gui = new ChestGui(guiRows, ComponentHolder.of(MiniMessage.miniMessage().deserialize(title)));
         gui.setOnGlobalClick(event -> event.setCancelled(true));
 
-        // Create border pane
-        OutlinePane borderPane = new OutlinePane(0, 0, 9, GUI_ROWS, Pane.Priority.LOWEST);
-        borderPane.addItem(new GuiItem(createBorderItem()));
-        borderPane.setRepeat(true);
-        gui.addPane(borderPane);
+        // Background pane
+        StaticPane backgroundPane = new StaticPane(0, 0, 9, guiRows, Pane.Priority.LOWEST);
+        fillBackgroundFromConfig(backgroundPane);
+        gui.addPane(backgroundPane);
 
-        // Create content pane for blueprints (7x4 grid in the middle)
-        StaticPane contentPane = new StaticPane(1, 1, 7, 4, Pane.Priority.NORMAL);
+        // Content pane for blueprints
+        StaticPane contentPane = new StaticPane(0, 0, 9, guiRows, Pane.Priority.NORMAL);
+        int startIndex = session.getCurrentPage() * itemsPerPage;
+        int endIndex = Math.min(startIndex + itemsPerPage, structures.size());
 
-        int startIndex = session.getCurrentPage() * ITEMS_PER_PAGE;
-        int endIndex = Math.min(startIndex + ITEMS_PER_PAGE, structures.size());
-
-        int slot = 0;
-        for (int i = startIndex; i < endIndex; i++) {
+        int slotIdx = 0;
+        for (int i = startIndex; i < endIndex && slotIdx < contentSlots.size(); i++) {
             StructureEntry entry = structures.get(i);
-            int x = slot % 7;
-            int y = slot / 7;
-
-            GuiItem guiItem = createBlueprintItem(player, town, entry);
-            contentPane.addItem(guiItem, x, y);
-            slot++;
+            int[] pos = contentSlots.get(slotIdx);
+            contentPane.addItem(createBlueprintItem(player, town, entry), pos[0], pos[1]);
+            slotIdx++;
         }
         gui.addPane(contentPane);
 
-        // Create control pane (bottom row)
-        StaticPane controlPane = new StaticPane(0, 5, 9, 1, Pane.Priority.HIGH);
+        // Control pane
+        StaticPane controlPane = new StaticPane(0, 0, 9, guiRows, Pane.Priority.HIGH);
 
-        // Back button (slot 0)
-        controlPane.addItem(createBackButton(player, session, totalPages), 0, 0);
-
-        // Search button (slot 1) - Spyglass
-        controlPane.addItem(createSearchButton(player, session), 1, 0);
-
-        // Clear search button (slot 2) - only if search is active
-        if (session.hasSearchFilter()) {
-            controlPane.addItem(createClearSearchButton(player, session), 2, 0);
+        if (controlSlots.containsKey("return")) {
+            int[] pos = controlSlots.get("return");
+            controlPane.addItem(createReturnButton(player), pos[0], pos[1]);
         }
 
-        // Toggle sort mode button (slot 4 - center)
-        controlPane.addItem(createToggleButton(player, session), 4, 0);
+        if (controlSlots.containsKey("back")) {
+            int[] pos = controlSlots.get("back");
+            controlPane.addItem(createBackButton(player, session, totalPages), pos[0], pos[1]);
+        }
 
-        // Page info (slot 6)
-        controlPane.addItem(createPageInfoItem(session.getCurrentPage() + 1, totalPages), 6, 0);
+        if (controlSlots.containsKey("search")) {
+            int[] pos = controlSlots.get("search");
+            controlPane.addItem(createSearchButton(player, session), pos[0], pos[1]);
+        }
 
-        // Next button (slot 8)
-        controlPane.addItem(createNextButton(player, session, totalPages), 8, 0);
+        if (controlSlots.containsKey("clearsearch") && session.hasSearchFilter()) {
+            int[] pos = controlSlots.get("clearsearch");
+            controlPane.addItem(createClearSearchButton(player, session), pos[0], pos[1]);
+        }
+
+        if (controlSlots.containsKey("toggle")) {
+            int[] pos = controlSlots.get("toggle");
+            controlPane.addItem(createToggleButton(player, session), pos[0], pos[1]);
+        }
+
+        if (controlSlots.containsKey("pageinfo")) {
+            int[] pos = controlSlots.get("pageinfo");
+            controlPane.addItem(createPageInfoItem(session.getCurrentPage() + 1, totalPages), pos[0], pos[1]);
+        }
+
+        if (controlSlots.containsKey("next")) {
+            int[] pos = controlSlots.get("next");
+            controlPane.addItem(createNextButton(player, session, totalPages), pos[0], pos[1]);
+        }
 
         gui.addPane(controlPane);
-
         gui.show(player);
+    }
+
+    private void fillBackgroundFromConfig(StaticPane pane) {
+        if (guiConfig == null || guiConfig.inventory == null) return;
+
+        Map<Character, ItemStack> charToItem = new HashMap<>();
+        if (guiConfig.mask != null) {
+            for (GuiConfig.MaskConfig mask : guiConfig.mask) {
+                if (mask.C != null && !mask.C.isEmpty() && mask.id != null) {
+                    if (mask.supplier != null) continue;
+
+                    Material mat = Material.matchMaterial(mask.id);
+                    if (mat != null && mat != Material.AIR) {
+                        ItemStack item = new ItemStack(mat);
+                        item.editMeta(meta -> {
+                            if (mask.translationKey != null) {
+                                meta.displayName(MiniMessage.miniMessage().deserialize(mask.translationKey));
+                            } else {
+                                meta.displayName(Component.text(" "));
+                            }
+                        });
+                        charToItem.put(mask.C.charAt(0), item);
+                    }
+                }
+            }
+        }
+
+        for (int row = 0; row < guiConfig.inventory.size(); row++) {
+            String rowStr = guiConfig.inventory.get(row);
+            for (int col = 0; col < rowStr.length(); col++) {
+                char c = rowStr.charAt(col);
+                ItemStack item = charToItem.get(c);
+                if (item != null) {
+                    pane.addItem(new GuiItem(item.clone(), e -> e.setCancelled(true)), col, row);
+                }
+            }
+        }
     }
 
     private String createTitle(Town town, BlueprintGuiSession session, int totalPages) {
         StringBuilder title = new StringBuilder();
         title.append("<white>").append(town.getName()).append(" - Blueprints");
-
         if (session.hasSearchFilter()) {
             title.append(" <gray>[Search: ").append(session.getSearchFilter()).append("]");
         }
-
         return title.toString();
     }
 
@@ -184,7 +327,6 @@ public class BlueprintsGui {
             entries.add(new StructureEntry(structure, canShow, requiredLevel, buildCount));
         }
 
-        // Apply search filter
         if (session.hasSearchFilter()) {
             String filter = session.getSearchFilter();
             entries = entries.stream()
@@ -193,7 +335,6 @@ public class BlueprintsGui {
                     .collect(Collectors.toList());
         }
 
-        // Apply sort mode filter/sort
         BlueprintSortMode sortMode = session.getSortMode();
 
         switch (sortMode) {
@@ -219,7 +360,6 @@ public class BlueprintsGui {
                 entries.sort((a, b) -> Integer.compare(b.requiredLevel, a.requiredLevel));
                 break;
             default:
-                // Level filters (LEVEL_1 through LEVEL_9)
                 if (sortMode.isLevelFilter()) {
                     int levelFilter = sortMode.getLevelFilter();
                     entries = entries.stream()
@@ -245,13 +385,12 @@ public class BlueprintsGui {
                 }
             }
         }
-        return 1; // Default to level 1 if no level requirement found
+        return 1;
     }
 
     private GuiItem createBlueprintItem(Player player, Town town, StructureEntry entry) {
         ItemStack itemStack = structureService.toItemStack(entry.structure, entry.buildCount);
 
-        // Add availability indicator to lore
         ItemMeta meta = itemStack.getItemMeta();
         List<Component> lore = meta.lore();
         if (lore == null) {
@@ -295,32 +434,27 @@ public class BlueprintsGui {
         });
     }
 
-    private ItemStack createBorderItem() {
-        ItemStack item = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text(" "));
-        item.setItemMeta(meta);
-        return item;
+    private GuiItem createReturnButton(Player player) {
+        ItemStack item = new ItemStack(Material.ARROW);
+        item.editMeta(meta -> {
+            meta.displayName(Component.text("Return to Main Menu", NamedTextColor.GREEN));
+            meta.lore(List.of(Component.text("Click to go back", NamedTextColor.GRAY)));
+        });
+        return new GuiItem(item, event -> {
+            event.setCancelled(true);
+            player.closeInventory();
+            TownyCivs.MORE_PAPER_LIB.scheduling().entitySpecificScheduler(player)
+                    .run(() -> player.performCommand("townycivs"), null);
+        });
     }
 
     private GuiItem createBackButton(Player player, BlueprintGuiSession session, int totalPages) {
         ItemStack item = new ItemStack(Material.ARROW);
-        ItemMeta meta = item.getItemMeta();
-
-        if (session.getCurrentPage() > 0) {
-            meta.displayName(Component.text("◀ Previous Page", NamedTextColor.GREEN));
-            meta.lore(List.of(
-                    Component.text("Click to go to page " + session.getCurrentPage(), NamedTextColor.GRAY)
-            ));
-        } else {
-            meta.displayName(Component.text("◀ Previous Page", NamedTextColor.GRAY));
-            meta.lore(List.of(
-                    Component.text("You are on the first page", NamedTextColor.GRAY)
-            ));
-        }
-
-        item.setItemMeta(meta);
-
+        item.editMeta(meta -> {
+            boolean canGoBack = session.getCurrentPage() > 0;
+            meta.displayName(Component.text("◀ Previous Page", canGoBack ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+            meta.lore(List.of(Component.text(canGoBack ? "Click to go to page " + session.getCurrentPage() : "You are on the first page", NamedTextColor.GRAY)));
+        });
         return new GuiItem(item, event -> {
             event.setCancelled(true);
             if (session.getCurrentPage() > 0) {
@@ -332,22 +466,11 @@ public class BlueprintsGui {
 
     private GuiItem createNextButton(Player player, BlueprintGuiSession session, int totalPages) {
         ItemStack item = new ItemStack(Material.ARROW);
-        ItemMeta meta = item.getItemMeta();
-
-        if (session.getCurrentPage() < totalPages - 1) {
-            meta.displayName(Component.text("Next Page ▶", NamedTextColor.GREEN));
-            meta.lore(List.of(
-                    Component.text("Click to go to page " + (session.getCurrentPage() + 2), NamedTextColor.GRAY)
-            ));
-        } else {
-            meta.displayName(Component.text("Next Page ▶", NamedTextColor.GRAY));
-            meta.lore(List.of(
-                    Component.text("You are on the last page", NamedTextColor.GRAY)
-            ));
-        }
-
-        item.setItemMeta(meta);
-
+        item.editMeta(meta -> {
+            boolean canGoNext = session.getCurrentPage() < totalPages - 1;
+            meta.displayName(Component.text("Next Page ▶", canGoNext ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+            meta.lore(List.of(Component.text(canGoNext ? "Click to go to page " + (session.getCurrentPage() + 2) : "You are on the last page", NamedTextColor.GRAY)));
+        });
         return new GuiItem(item, event -> {
             event.setCancelled(true);
             if (session.getCurrentPage() < totalPages - 1) {
@@ -359,20 +482,17 @@ public class BlueprintsGui {
 
     private GuiItem createSearchButton(Player player, BlueprintGuiSession session) {
         ItemStack item = new ItemStack(Material.SPYGLASS);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text("🔍 Search Blueprints", NamedTextColor.YELLOW));
-
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text("Click to search for blueprints", NamedTextColor.GRAY));
-        if (session.hasSearchFilter()) {
-            lore.add(Component.empty());
-            lore.add(Component.text("Current filter: ", NamedTextColor.WHITE)
-                    .append(Component.text(session.getSearchFilter(), NamedTextColor.AQUA)));
-        }
-        meta.lore(lore);
-
-        item.setItemMeta(meta);
-
+        item.editMeta(meta -> {
+            meta.displayName(Component.text("🔍 Search Blueprints", NamedTextColor.YELLOW));
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.text("Click to search for blueprints", NamedTextColor.GRAY));
+            if (session.hasSearchFilter()) {
+                lore.add(Component.empty());
+                lore.add(Component.text("Current filter: ", NamedTextColor.WHITE)
+                        .append(Component.text(session.getSearchFilter(), NamedTextColor.AQUA)));
+            }
+            meta.lore(lore);
+        });
         return new GuiItem(item, event -> {
             event.setCancelled(true);
             openSearchGui(player, session);
@@ -381,14 +501,13 @@ public class BlueprintsGui {
 
     private GuiItem createClearSearchButton(Player player, BlueprintGuiSession session) {
         ItemStack item = new ItemStack(Material.BARRIER);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text("✗ Clear Search", NamedTextColor.RED));
-        meta.lore(List.of(
-                Component.text("Current: " + session.getSearchFilter(), NamedTextColor.GRAY),
-                Component.text("Click to clear search filter", NamedTextColor.YELLOW)
-        ));
-        item.setItemMeta(meta);
-
+        item.editMeta(meta -> {
+            meta.displayName(Component.text("✗ Clear Search", NamedTextColor.RED));
+            meta.lore(List.of(
+                    Component.text("Current: " + session.getSearchFilter(), NamedTextColor.GRAY),
+                    Component.text("Click to clear search filter", NamedTextColor.YELLOW)
+            ));
+        });
         return new GuiItem(item, event -> {
             event.setCancelled(true);
             session.clearSearchFilter();
@@ -398,33 +517,30 @@ public class BlueprintsGui {
 
     private GuiItem createToggleButton(Player player, BlueprintGuiSession session) {
         ItemStack item = new ItemStack(Material.COMPASS);
-        ItemMeta meta = item.getItemMeta();
-
         BlueprintSortMode currentMode = session.getSortMode();
         BlueprintSortMode nextMode = currentMode.next();
 
-        meta.displayName(Component.text("⚙ Sort: " + currentMode.getDisplayName(), NamedTextColor.GREEN));
+        item.editMeta(meta -> {
+            meta.displayName(Component.text("⚙ Sort: " + currentMode.getDisplayName(), NamedTextColor.GREEN));
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.text(currentMode.getDescription(), NamedTextColor.GRAY));
+            lore.add(Component.empty());
+            lore.add(Component.text("Left-click: ", NamedTextColor.WHITE)
+                    .append(Component.text("Next mode (" + nextMode.getDisplayName() + ")", NamedTextColor.YELLOW)));
+            lore.add(Component.text("Right-click: ", NamedTextColor.WHITE)
+                    .append(Component.text("Previous mode", NamedTextColor.YELLOW)));
+            lore.add(Component.empty());
+            lore.add(Component.text("Available modes:", NamedTextColor.AQUA));
 
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(currentMode.getDescription(), NamedTextColor.GRAY));
-        lore.add(Component.empty());
-        lore.add(Component.text("Left-click: ", NamedTextColor.WHITE)
-                .append(Component.text("Next mode (" + nextMode.getDisplayName() + ")", NamedTextColor.YELLOW)));
-        lore.add(Component.text("Right-click: ", NamedTextColor.WHITE)
-                .append(Component.text("Previous mode", NamedTextColor.YELLOW)));
-        lore.add(Component.empty());
-        lore.add(Component.text("Available modes:", NamedTextColor.AQUA));
-
-        for (BlueprintSortMode mode : BlueprintSortMode.values()) {
-            if (mode == currentMode) {
-                lore.add(Component.text(" ▶ " + mode.getDisplayName(), NamedTextColor.GREEN));
-            } else {
-                lore.add(Component.text("   " + mode.getDisplayName(), NamedTextColor.GRAY));
+            for (BlueprintSortMode mode : BlueprintSortMode.values()) {
+                if (mode == currentMode) {
+                    lore.add(Component.text(" ▶ " + mode.getDisplayName(), NamedTextColor.GREEN));
+                } else {
+                    lore.add(Component.text("   " + mode.getDisplayName(), NamedTextColor.GRAY));
+                }
             }
-        }
-
-        meta.lore(lore);
-        item.setItemMeta(meta);
+            meta.lore(lore);
+        });
 
         return new GuiItem(item, event -> {
             event.setCancelled(true);
@@ -439,10 +555,9 @@ public class BlueprintsGui {
 
     private GuiItem createPageInfoItem(int currentPage, int totalPages) {
         ItemStack item = new ItemStack(Material.PAPER);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text("Page " + currentPage + "/" + totalPages, NamedTextColor.WHITE));
-        item.setItemMeta(meta);
-
+        item.editMeta(meta -> {
+            meta.displayName(Component.text("Page " + currentPage + "/" + totalPages, NamedTextColor.WHITE));
+        });
         return new GuiItem(item, event -> event.setCancelled(true));
     }
 
@@ -450,24 +565,18 @@ public class BlueprintsGui {
         AnvilGui anvilGui = new AnvilGui(ComponentHolder.of(
                 Component.text("Search Blueprints", NamedTextColor.DARK_PURPLE)));
 
-        // First slot - search icon with current query
         StaticPane firstPane = new StaticPane(0, 0, 1, 1);
         ItemStack searchItem = new ItemStack(Material.PAPER);
-        ItemMeta searchMeta = searchItem.getItemMeta();
-        searchMeta.displayName(Component.text(session.hasSearchFilter() ? session.getSearchFilter() : "Type to search...", NamedTextColor.WHITE));
-        searchItem.setItemMeta(searchMeta);
+        searchItem.editMeta(meta -> meta.displayName(Component.text(session.hasSearchFilter() ? session.getSearchFilter() : "Type to search...", NamedTextColor.WHITE)));
         firstPane.addItem(new GuiItem(searchItem, e -> e.setCancelled(true)), 0, 0);
         anvilGui.getFirstItemComponent().addPane(firstPane);
 
-        // Result slot - confirm button
         StaticPane resultPane = new StaticPane(0, 0, 1, 1);
         ItemStack confirmItem = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-        ItemMeta confirmMeta = confirmItem.getItemMeta();
-        confirmMeta.displayName(Component.text("✓ Click to Search", NamedTextColor.GREEN));
-        confirmMeta.lore(List.of(
-                Component.text("Click to apply your search", NamedTextColor.GRAY)
-        ));
-        confirmItem.setItemMeta(confirmMeta);
+        confirmItem.editMeta(meta -> {
+            meta.displayName(Component.text("✓ Click to Search", NamedTextColor.GREEN));
+            meta.lore(List.of(Component.text("Click to apply your search", NamedTextColor.GRAY)));
+        });
 
         resultPane.addItem(new GuiItem(confirmItem, event -> {
             event.setCancelled(true);
@@ -480,7 +589,6 @@ public class BlueprintsGui {
         anvilGui.getResultComponent().addPane(resultPane);
 
         anvilGui.setOnClose(event -> {
-            // Return to main GUI when anvil is closed
             TownyCivs.MORE_PAPER_LIB.scheduling().entitySpecificScheduler(player)
                     .run(() -> createAndShowGui(player, session), null);
         });
@@ -488,9 +596,6 @@ public class BlueprintsGui {
         anvilGui.show(player);
     }
 
-    /**
-     * Helper class to hold structure data with computed fields.
-     */
     private static class StructureEntry {
         final Structure structure;
         final boolean canBuy;

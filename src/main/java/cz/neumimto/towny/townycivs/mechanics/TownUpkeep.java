@@ -2,7 +2,7 @@ package cz.neumimto.towny.townycivs.mechanics;
 
 import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
 
-class MoneyUpkeep implements Mechanic<DoubleWrapper> {
+class TownUpkeep implements Mechanic<DoubleWrapper> {
 
     @Override
     public boolean check(TownContext townContext, DoubleWrapper configContext) {

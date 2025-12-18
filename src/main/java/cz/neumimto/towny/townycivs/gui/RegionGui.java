@@ -200,10 +200,19 @@ public class RegionGui extends TCGui {
 
     private ChestGui upkeepGui(Region region) {
         MiniMessage mm = MiniMessage.miniMessage();
-        ChestGui chestGui = new ChestGui(3, "Upkeep");
+        ChestGui chestGui = new ChestGui(4, "Upkeep");
 
-        StaticPane staticPane = new StaticPane(9, 3);
+        StaticPane staticPane = new StaticPane(9, 4);
         chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            display((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
         int x = 0;
         int y = 0;
 
@@ -300,10 +309,19 @@ public class RegionGui extends TCGui {
 
     private ChestGui productionGui(Region region) {
         MiniMessage mm = MiniMessage.miniMessage();
-        ChestGui chestGui = new ChestGui(3, "Production");
+        ChestGui chestGui = new ChestGui(4, "Production");
 
-        StaticPane staticPane = new StaticPane(9, 3);
+        StaticPane staticPane = new StaticPane(9, 4);
         chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            display((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
         int x = 0;
         int y = 0;
 
@@ -339,10 +357,20 @@ public class RegionGui extends TCGui {
     @NotNull
     private ChestGui remainingBlocksGui(Region region) {
         MiniMessage mm = MiniMessage.miniMessage();
-        ChestGui chestGui = new ChestGui(3, "Remaining Blocks");
+        ChestGui chestGui = new ChestGui(4, "Remaining Blocks");
 
-        StaticPane staticPane = new StaticPane(9, 6);
+        StaticPane staticPane = new StaticPane(9, 4);
+
         chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            display((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
         int x = 0;
         int y = 0;
         Map<String, Integer> requirements = region.loadedStructure.structureDef.blocks;

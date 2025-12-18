@@ -63,6 +63,11 @@ public class StructureGui extends TCGui {
         chestGui.show(player);
     }
 
+    public void displayRegion(Player player, Region region) {
+        ChestGui chestGui = loadGui(player, region.loadedStructure.uuid.toString());
+        chestGui.show(player);
+    }
+
     @Override
     public Map<String, List<GuiCommand>> getPaneData(CommandSender commandSender, String param) {
         Player player = (Player) commandSender;
@@ -80,7 +85,7 @@ public class StructureGui extends TCGui {
         }
 
         LoadedStructure structure = structureOpt.get();
-        Region region = subclaimService.getRegion(structureUUID);
+        Region region = subclaimService.getRegion(structure);
 
         if (region == null) {
             commandSender.sendMessage(Component.text("§cError: Region not found for structure ID" + structureUUID));
@@ -118,6 +123,7 @@ public class StructureGui extends TCGui {
         });
         map.put("EditModeToggle", List.of(new GuiCommand(editMode, e -> {
             e.setCancelled(true);
+            e.getWhoClicked().sendMessage(mm.deserialize("<gold>Edit mode</gold> : You are in Structure GUI mode, cannot edit the region directly."));
         })));
 
         ItemStack delete = new ItemStack(Material.BARRIER);
@@ -126,6 +132,7 @@ public class StructureGui extends TCGui {
         });
         map.put("Delete", List.of(new GuiCommand(delete, e -> {
             e.setCancelled(true);
+            e.getWhoClicked().sendMessage(mm.deserialize("<red>Cannot delete as you are in Structure GUI mode.</red>"));
         })));
 
 
@@ -166,17 +173,192 @@ public class StructureGui extends TCGui {
 
         }
 
-        map.put("Status", List.of(new GuiCommand(status, e -> e.setCancelled(true))));
+        map.put("Status", List.of(new GuiCommand(status, e -> {
+            e.setCancelled(true);
+            if(e.isLeftClick()){
+                ChestGui chestGui = upkeepGui(region);
+                chestGui.show(e.getWhoClicked());
+            }else if(e.isRightClick()){
+                ChestGui chestGui = productionGui(region);
+                chestGui.show(e.getWhoClicked());
+            }
+        })));
         return map;
+    }
+
+    private ChestGui upkeepGui(Region region) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        ChestGui chestGui = new ChestGui(4, "Upkeep");
+
+        StaticPane staticPane = new StaticPane(9, 4);
+        chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            displayRegion((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
+        int x = 0;
+        int y = 0;
+
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> upkeep = region.loadedStructure.structureDef.upkeep;
+
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> production = region.loadedStructure.structureDef.production;
+
+        for (Structure.LoadedPair<Mechanic<Object>, Object> m : upkeep) {
+            String mechanicId = m.mechanic.id();
+
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPKEEP)) {
+                cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
+                        (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
+
+                boolean requireAll = itemList.requireAll != null ? itemList.requireAll : true;
+
+                if (!requireAll) {
+                    ItemStack bundleStack = new ItemStack(Material.BUNDLE);
+                    bundleStack.editMeta(itemMeta -> {
+                        BundleMeta bundleMeta = (BundleMeta) itemMeta;
+                        bundleMeta.displayName(mm.deserialize("<aqua>Alternative Options (ANY ONE)</aqua>"));
+                        var lore = new ArrayList<Component>();
+                        lore.add(mm.deserialize("<gray>Any one of these items works:</gray>"));
+
+                        // Add each item to the bundle
+                        for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                            ItemStack itemStack = configItem.toItemStack();
+                            bundleMeta.addItem(itemStack);
+
+                            // Add info to lore
+                            String itemName = itemStack.getType().name();
+                            if (configItem.consumeItem != null && configItem.consumeItem) {
+                                int amount = configItem.consumeAmount != null ? configItem.consumeAmount : 1;
+                                lore.add(mm.deserialize("<white>• " + itemName + " <red>(Consumed: " + amount + ")</red></white>"));
+                            } else if (configItem.damageAmount != null) {
+                                lore.add(mm.deserialize("<white>• " + itemName + " <gold>(Damage: " + configItem.damageAmount + ")</gold></white>"));
+                            } else {
+                                lore.add(mm.deserialize("<white>• " + itemName + "</white>"));
+                            }
+                        }
+                        bundleMeta.lore(lore);
+                    });
+                    staticPane.addItem(new GuiItem(bundleStack, e -> e.setCancelled(true)), x, y);
+                    x++;
+                    if (x == 9) {
+                        x = 0;
+                        y++;
+                    }
+                } else {
+                    for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                        ItemStack itemStack = configItem.toItemStack();
+                        itemStack.editMeta(itemMeta -> {
+                            var lore = new ArrayList<Component>();
+                            lore.add(mm.deserialize("<yellow>Required Item</yellow>"));
+                            if (configItem.consumeItem != null && configItem.consumeItem) {
+                                lore.add(mm.deserialize("<red>Consumed: " + (configItem.consumeAmount != null ? configItem.consumeAmount : 1) + "x</red>"));
+                            }
+                            if (configItem.damageAmount != null) {
+                                lore.add(mm.deserialize("<gold>Damage: " + configItem.damageAmount + "</gold>"));
+                            }
+                            itemMeta.lore(lore);
+                        });
+                        staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                        x++;
+                        if (x == 9) {
+                            x = 0;
+                            y++;
+                        }
+                    }
+                }
+            }
+
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_UPKEEP)) {
+                // MoneyUpkeep - show as paper item
+                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper doubleWrapper = (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) m.configValue;
+
+                ItemStack moneyItem = new ItemStack(Material.PAPER);
+                moneyItem.editMeta(itemMeta -> {
+                    itemMeta.displayName(mm.deserialize("<gold>Money Upkeep</gold>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Cost: $" + doubleWrapper.value + "</yellow>"));
+                    itemMeta.lore(lore);
+                });
+                staticPane.addItem(new GuiItem(moneyItem, e -> e.setCancelled(true)), x, y);
+                x++;
+                if (x == 9) {
+                    x = 0;
+                    y++;
+                }
+            }
+        }
+        return chestGui;
+    }
+
+    private ChestGui productionGui(Region region) {
+        MiniMessage mm = MiniMessage.miniMessage();
+        ChestGui chestGui = new ChestGui(4, "Production");
+
+        StaticPane staticPane = new StaticPane(9, 4);
+        chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            displayRegion((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
+        int x = 0;
+        int y = 0;
+
+        List<Structure.LoadedPair<Mechanic<Object>, Object>> production = region.loadedStructure.structureDef.production;
+
+        for (Structure.LoadedPair<Mechanic<Object>, Object> m : production) {
+            String mechanicId = m.mechanic.id();
+
+            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.ITEM_PRODUCTION)) {
+                // ItemProduction - show items that will be produced
+                cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
+                        (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
+
+                for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
+                    ItemStack itemStack = configItem.toItemStack();
+                    itemStack.editMeta(itemMeta -> {
+                        var lore = new ArrayList<Component>();
+                        lore.add(mm.deserialize("<yellow>Produced Item</yellow>"));
+                        itemMeta.lore(lore);
+                    });
+                    staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                    x++;
+                    if (x == 9) {
+                        x = 0;
+                        y++;
+                    }
+                }
+            }
+        }
+        return chestGui;
     }
 
     @NotNull
     private ChestGui remainingBlocksGui(Region region) {
         MiniMessage mm = MiniMessage.miniMessage();
-        ChestGui chestGui = new ChestGui(6, "Remaining Blocks");
+        ChestGui chestGui = new ChestGui(4, "Remaining Blocks");
 
-        StaticPane staticPane = new StaticPane(9, 6);
+        StaticPane staticPane = new StaticPane(9, 4);
+
         chestGui.addPane(staticPane);
+
+        // Back button in bottom-left corner
+        ItemStack backButton = new ItemStack(Material.ARROW);
+        backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
+        staticPane.addItem(new GuiItem(backButton, e -> {
+            e.setCancelled(true);
+            displayRegion((Player) e.getWhoClicked(), region);
+        }), 0, 3);
+
         int x = 0;
         int y = 0;
         Map<String, Integer> requirements = region.loadedStructure.structureDef.blocks;
@@ -241,4 +423,5 @@ public class StructureGui extends TCGui {
         }
         return chestGui;
     }
+
 }

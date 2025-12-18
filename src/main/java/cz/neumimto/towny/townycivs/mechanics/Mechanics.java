@@ -14,4 +14,5 @@ public interface Mechanics {
     String Y_ABOVE = "y_above";
     String Y_BELLOW = "y_above";
     String BIOME = "biome";
+    String MONEY_PRODUCTION = "money";
 }

@@ -9,7 +9,7 @@ plugins {
 }
 
 group = 'cz.neumimto.towny'
-version = 'ALPHA-1.0.4'
+version = 'ALPHA-1.0.5'
 
 repositories {
     mavenCentral()
@@ -111,7 +111,7 @@ shadowJar {
 }
 
 runServer {
-    minecraftVersion("1.21.6")
+    minecraftVersion("1.21.10")
 }
 
 java.nio.file.Path pluginsDir;

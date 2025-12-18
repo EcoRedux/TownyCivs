@@ -2,6 +2,7 @@ package cz.neumimto.towny.townycivs.mechanics;
 
 import com.palmergames.bukkit.towny.TownyMessaging;
 import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 
 class Price implements Mechanic<DoubleWrapper> {
 
@@ -13,12 +14,12 @@ class Price implements Mechanic<DoubleWrapper> {
 
     @Override
     public void postAction(TownContext townContext, DoubleWrapper configContext) {
-        townContext.town.getAccount().withdraw(configContext.value, "townycivs - bought " + townContext.structure.id);
+        townContext.town.getAccount().withdraw(configContext.value, "TownyCivs - bought " + townContext.structure.id);
     }
 
     @Override
     public void nokmessage(TownContext townContext, DoubleWrapper configuration) {
-        townContext.player.sendMessage("Not enough funds in town bank - " + configuration.value);
+        townContext.player.sendMessage(MiniMessage.miniMessage().deserialize("<gold>[TownyCivs]</gold> <red>Town does not have enough balance to pay</red><aqua> " + configuration.value + "</aqua><red>."));
     }
 
     @Override
