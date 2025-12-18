@@ -35,6 +35,12 @@ public class Structure {
     @Path("MaxCount")
     public Integer maxCount;
 
+    @Path("Buyable")
+    public Boolean buyable = true;
+
+    @Path("UpgradeFrom")
+    public String upgradeFrom;
+
     @Path("AreaRadius")
     @Conversion(AreaConversion.class)
     public Area area;

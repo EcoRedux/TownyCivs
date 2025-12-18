@@ -142,6 +142,18 @@ public class ManagementService {
         if (editSessions.containsKey(new PlayerBlueprintKey(player.getUniqueId(), item))) {
             EditSession editSession = editSessions.get(new PlayerBlueprintKey(player.getUniqueId(), item));
             editSession.center = location;
+
+            // Check max build count before placing
+            Town town = TownyAPI.getInstance().getResident(player).getTownOrNull();
+            if (town != null && editSession.structure.maxCount != null && editSession.structure.maxCount > 0) {
+                int currentCount = structureService.countStructuresInUpgradeChain(town, editSession.structure);
+                if (currentCount >= editSession.structure.maxCount) {
+                    MiniMessage mm = MiniMessage.miniMessage();
+                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Cannot place " + editSession.structure.name + ". Maximum build count reached (" + currentCount + "/" + editSession.structure.maxCount + "). This includes upgraded versions.</red>"));
+                    return;
+                }
+            }
+
             if (moveTo(player, editSession.center, item)) {
                 placeBlueprint(player, editSession.center, editSession.structure);
                 if (editSession.currentStructureBorder != null) {

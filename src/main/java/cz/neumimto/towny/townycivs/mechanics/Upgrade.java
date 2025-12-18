@@ -4,6 +4,7 @@ package cz.neumimto.towny.townycivs.mechanics;
 import com.palmergames.bukkit.towny.TownyMessaging;
 import cz.neumimto.towny.townycivs.StructureService;
 import cz.neumimto.towny.townycivs.TownyCivs;
+import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.mechanics.common.StringWrapper;
 
@@ -26,15 +27,33 @@ public class Upgrade implements Mechanic<StringWrapper> {
             return false; // No upgrade path defined
         }
 
-        // Check if the target upgrade structure exists
-        StructureService structureService = TownyCivs.injector.getInstance(StructureService.class);
+        // Check if the current structure exists
         Optional<Structure> newStructureDef = Optional.ofNullable(townContext.structure);
-
         if (newStructureDef.isEmpty()) {
-            return false; // Target structure doesn't exist
+            return false;
         }
 
-        return true; // Target structure exists
+        // Get the target structure and check MaxCount
+        ConfigurationService configService = TownyCivs.injector.getInstance(ConfigurationService.class);
+        Optional<Structure> targetStructureOpt = configService.findStructureById(targetStructureId);
+
+        if (targetStructureOpt.isEmpty()) {
+            return false; // Target structure not found in config
+        }
+
+        Structure targetStructure = targetStructureOpt.get();
+
+        // Check MaxCount for the target structure
+        if (targetStructure.maxCount != null && targetStructure.maxCount > 0) {
+            StructureService structureService = TownyCivs.injector.getInstance(StructureService.class);
+            int currentCount = structureService.findTownStructureById(townContext.town, targetStructure).count;
+
+            if (currentCount >= targetStructure.maxCount) {
+                return false; // Would exceed MaxCount for target structure
+            }
+        }
+
+        return true; // All checks passed
     }
 
     @Override
@@ -53,7 +72,37 @@ public class Upgrade implements Mechanic<StringWrapper> {
     @Override
     public void nokmessage(TownContext townContext, StringWrapper configuration) {
         if (townContext.player != null) {
-            townContext.player.sendMessage(townContext.structure.name + " has no upgrade path or missing requirements.");
+            String upgradePath = townContext.structure.upgradePath;
+            String targetStructureId = (configuration != null && configuration.value != null && !configuration.value.isEmpty())
+                ? configuration.value
+                : upgradePath;
+
+            if (targetStructureId == null || targetStructureId.isEmpty()) {
+                townContext.player.sendMessage("§c" + townContext.structure.name + " has no upgrade path defined.");
+                return;
+            }
+
+            ConfigurationService configService = TownyCivs.injector.getInstance(ConfigurationService.class);
+            Optional<Structure> targetStructureOpt = configService.findStructureById(targetStructureId);
+
+            if (targetStructureOpt.isEmpty()) {
+                townContext.player.sendMessage("§cUpgrade target '" + targetStructureId + "' does not exist.");
+                return;
+            }
+
+            Structure targetStructure = targetStructureOpt.get();
+
+            // Check if MaxCount is the issue
+            if (targetStructure.maxCount != null && targetStructure.maxCount > 0) {
+                StructureService structureService = TownyCivs.injector.getInstance(StructureService.class);
+                int currentCount = structureService.findTownStructureById(townContext.town, targetStructure).count;
+                if (currentCount >= targetStructure.maxCount) {
+                    townContext.player.sendMessage("§cCannot upgrade to " + targetStructure.name + ". Maximum count reached (" + currentCount + "/" + targetStructure.maxCount + ").");
+                    return;
+                }
+            }
+
+            townContext.player.sendMessage("§c" + townContext.structure.name + " cannot be upgraded. Requirements not met.");
         }
     }
 

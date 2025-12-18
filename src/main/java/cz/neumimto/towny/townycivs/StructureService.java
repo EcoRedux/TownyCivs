@@ -136,10 +136,15 @@ public class StructureService {
     public boolean canShow(TownContext context) {
         boolean pass = true;
 
-        // Check MaxCount limit
+        // Check if structure is buyable at all
+        if (context.structure.buyable != null && !context.structure.buyable) {
+            return false;
+        }
+
+        // Check MaxCount limit (including upgraded versions in the count)
         if (context.structure.maxCount != null) {
-            StructureAndCount structureAndCount = findTownStructureById(context.town, context.structure);
-            if (structureAndCount.count >= context.structure.maxCount) {
+            int totalCount = countStructuresInUpgradeChain(context.town, context.structure);
+            if (totalCount >= context.structure.maxCount) {
                 pass = false;
             }
         }
@@ -157,11 +162,17 @@ public class StructureService {
     public boolean canBuy(TownContext context) {
         boolean pass = true;
 
-        // Check MaxCount limit
+        // Check if structure is buyable at all
+        if (context.structure.buyable != null && !context.structure.buyable) {
+            context.player.sendMessage("§c" + context.structure.name + " cannot be purchased. It can only be obtained through upgrades.");
+            return false;
+        }
+
+        // Check MaxCount limit (including upgraded versions in the count)
         if (context.structure.maxCount != null) {
-            StructureAndCount structureAndCount = findTownStructureById(context.town, context.structure);
-            if (structureAndCount.count >= context.structure.maxCount) {
-                context.player.sendMessage("§cYou have reached the maximum number of " + context.structure.name + " structures (" + context.structure.maxCount + ")");
+            int totalCount = countStructuresInUpgradeChain(context.town, context.structure);
+            if (totalCount >= context.structure.maxCount) {
+                context.player.sendMessage("§cYou have reached the maximum number of " + context.structure.name + " structures (" + context.structure.maxCount + "). This includes upgraded versions.");
                 pass = false;
             }
         }
@@ -175,6 +186,57 @@ public class StructureService {
             }
         }
         return pass;
+    }
+
+    /**
+     * Counts all structures in an upgrade chain for a given base structure.
+     * For example, if checking coal_mine and town has:
+     * - 2 coal_mine
+     * - 3 advanced_coal_mine (UpgradeFrom: coal_mine)
+     * - 1 elite_coal_mine (UpgradeFrom: advanced_coal_mine)
+     * Total count = 2 + 3 + 1 = 6
+     */
+    public int countStructuresInUpgradeChain(Town town, Structure baseStructure) {
+        int count = 0;
+        Collection<LoadedStructure> townStructures = getAllStructures(town);
+
+        for (LoadedStructure loadedStructure : townStructures) {
+            Structure builtStructure = loadedStructure.structureDef;
+
+            // Count the base structure itself
+            if (builtStructure.id.equalsIgnoreCase(baseStructure.id)) {
+                count++;
+            }
+            // Count any structure that is an upgrade of this base structure
+            else if (isUpgradeOf(builtStructure, baseStructure.id)) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * Recursively checks if 'potentialUpgrade' is an upgrade of 'baseStructureId'.
+     * Handles upgrade chains: coal_mine -> advanced_coal_mine -> elite_coal_mine
+     */
+    private boolean isUpgradeOf(Structure potentialUpgrade, String baseStructureId) {
+        if (potentialUpgrade.upgradeFrom == null || potentialUpgrade.upgradeFrom.isEmpty()) {
+            return false;
+        }
+
+        // Direct upgrade
+        if (potentialUpgrade.upgradeFrom.equalsIgnoreCase(baseStructureId)) {
+            return true;
+        }
+
+        // Check the chain: maybe potentialUpgrade.upgradeFrom is also an upgrade of baseStructureId
+        Optional<Structure> parentStructure = configurationService.findStructureById(potentialUpgrade.upgradeFrom);
+        if (parentStructure.isPresent()) {
+            return isUpgradeOf(parentStructure.get(), baseStructureId);
+        }
+
+        return false;
     }
 
     public void addToTown(Town town, LoadedStructure loadedStructure) {
@@ -281,32 +343,38 @@ public class StructureService {
             // Transfer container locations
             newLoadedStructure.containerLocations.addAll(oldStructure.containerLocations);
 
-            // Recreate inventories with new structure name/title
+            // Get the item service for blocker checks
+            ItemService itemService = TownyCivs.injector.getInstance(ItemService.class);
+            ItemStack blocker = itemService.getInventoryBlocker();
+
+            // Close any open inventories and recreate with new structure name/title
             for (Map.Entry<Location, org.bukkit.inventory.Inventory> entry : oldStructure.inventory.entrySet()) {
                 Location containerLoc = entry.getKey();
                 org.bukkit.inventory.Inventory oldInv = entry.getValue();
 
-                // Create new inventory with updated structure name
+                // Close inventory for all viewers before modifying
+                new java.util.ArrayList<>(oldInv.getViewers()).forEach(viewer -> viewer.closeInventory());
+
+                // Create new inventory with 27 slots (standard chest) and updated structure name
                 org.bukkit.inventory.Inventory newInv = org.bukkit.Bukkit.getServer().createInventory(
                     null,
-                    newStructure.inventorySize,
+                    27,
                     net.kyori.adventure.text.Component.text(newStructure.name)
                 );
 
-                // Transfer items from old inventory to new inventory
+                // Transfer items from old inventory to new inventory (skip blocker items)
                 ItemStack[] oldContents = oldInv.getContents();
                 for (int i = 0; i < Math.min(oldContents.length, newStructure.inventorySize); i++) {
-                    if (oldContents[i] != null) {
-                        newInv.setItem(i, oldContents[i].clone());
+                    ItemStack item = oldContents[i];
+                    // Only transfer if not null and not a blocker item
+                    if (item != null && !itemService.isInventoryBlocker(item)) {
+                        newInv.setItem(i, item.clone());
                     }
                 }
 
-                // Add inventory blocker items if new inventory is smaller
-                if (newStructure.inventorySize < 27) {
-                    ItemStack blocker = TownyCivs.injector.getInstance(ItemService.class).getInventoryBlocker();
-                    for (int i = newStructure.inventorySize; i < 27; i++) {
-                        newInv.setItem(i, blocker);
-                    }
+                // Add inventory blocker items for slots beyond the usable inventory size
+                for (int i = newStructure.inventorySize; i < 27; i++) {
+                    newInv.setItem(i, blocker);
                 }
 
                 // Store new inventory

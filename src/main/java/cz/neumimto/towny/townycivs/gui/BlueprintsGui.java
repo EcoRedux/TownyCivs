@@ -323,8 +323,9 @@ public class BlueprintsGui {
             boolean canShow = structureService.canShow(townContext);
             int requiredLevel = getRequiredTownLevel(structure);
             int buildCount = structureService.findTownStructureById(town, structure).count;
+            int upgradeChainCount = structureService.countStructuresInUpgradeChain(town, structure);
 
-            entries.add(new StructureEntry(structure, canShow, requiredLevel, buildCount));
+            entries.add(new StructureEntry(structure, canShow, requiredLevel, buildCount, upgradeChainCount));
         }
 
         if (session.hasSearchFilter()) {
@@ -408,12 +409,30 @@ public class BlueprintsGui {
             lore.add(Component.text("Required Town Level: " + entry.requiredLevel, NamedTextColor.YELLOW));
         }
 
-        if (entry.buildCount >= entry.maxBuildCount) {
-            lore.add(Component.text("Max build count reached (" + entry.maxBuildCount + ")", NamedTextColor.RED));
-        } else if (entry.maxBuildCount != Integer.MAX_VALUE) {
-            lore.add(Component.text("Built: " + entry.buildCount + "/" + entry.maxBuildCount, NamedTextColor.GRAY));
+        // Show build count with upgrade chain info
+        int upgradedCount = entry.upgradeChainCount - entry.buildCount;
+
+        if (entry.maxBuildCount != Integer.MAX_VALUE) {
+            // Has a max count limit
+            if (entry.upgradeChainCount >= entry.maxBuildCount) {
+                lore.add(Component.text("Max build count reached (" + entry.maxBuildCount + ")", NamedTextColor.RED));
+            }
+
+            // Show: Built: 2/5 (base) or Built: 3/5 (2 base + 1 upgraded)
+            if (upgradedCount > 0) {
+                lore.add(Component.text("Built: " + entry.upgradeChainCount + "/" + entry.maxBuildCount, NamedTextColor.GRAY));
+                lore.add(Component.text("  ↳ " + entry.buildCount + " base + " + upgradedCount + " upgraded", NamedTextColor.DARK_GRAY));
+                lore.add(Component.text("  ↳ Upgrades share the same slot", NamedTextColor.GOLD));
+            } else {
+                lore.add(Component.text("Built: " + entry.buildCount + "/" + entry.maxBuildCount, NamedTextColor.GRAY));
+            }
         } else {
-            lore.add(Component.text("Built: " + entry.buildCount, NamedTextColor.GRAY));
+            // No max count limit
+            if (upgradedCount > 0) {
+                lore.add(Component.text("Built: " + entry.buildCount + " (+ " + upgradedCount + " upgraded)", NamedTextColor.GRAY));
+            } else {
+                lore.add(Component.text("Built: " + entry.buildCount, NamedTextColor.GRAY));
+            }
         }
 
 
@@ -612,13 +631,15 @@ public class BlueprintsGui {
         final int requiredLevel;
         final int buildCount;
         final int maxBuildCount;
+        final int upgradeChainCount;  // Total count including upgraded versions
 
-        StructureEntry(Structure structure, boolean canBuy, int requiredLevel, int buildCount) {
+        StructureEntry(Structure structure, boolean canBuy, int requiredLevel, int buildCount, int upgradeChainCount) {
             this.structure = structure;
             this.canBuy = canBuy;
             this.requiredLevel = requiredLevel;
             this.buildCount = buildCount;
             this.maxBuildCount = structure.maxCount != null ? structure.maxCount : Integer.MAX_VALUE;
+            this.upgradeChainCount = upgradeChainCount;
         }
     }
 }
