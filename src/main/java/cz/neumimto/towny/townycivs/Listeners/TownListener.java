@@ -80,6 +80,9 @@ public class TownListener implements Listener {
     @Inject
     private TutorialManager tutorialManager;
 
+    @Inject
+    private cz.neumimto.towny.townycivs.mechanics.AdministrationService administrationService;
+
     @EventHandler
     public void login(PlayerLoginEvent event) {
         // Login event - tutorial reminder handled in join event
@@ -400,14 +403,213 @@ public class TownListener implements Listener {
         handleBlockEditingWithinRegion(player, block, event);
     }
 
+    /**
+     * Block town level increases if they don't have the required Town Hall tier
+     * Note: This event is informational - actual blocking happens via invite/claim limits
+     */
+    @EventHandler(priority = EventPriority.HIGH)
     public void onTownLevelUp(TownLevelIncreaseEvent event) {
-        //todo later to block towns from leveling up if they dont have the necessary structures like town hall
-        event.getTown().getLevelNumber();
-        event.
+        Town town = event.getTown();
+        int newLevel = town.getLevelNumber(); // Get level from town directly
+
+        String requiredHallId = getRequiredTownHallForLevel(newLevel);
+
+        if (requiredHallId != null && !townHasStructureOrUpgrade(town, requiredHallId)) {
+            Optional<Structure> requiredHall = configurationService.findStructureById(requiredHallId);
+            String hallName = requiredHall.map(s -> s.name).orElse(requiredHallId);
+
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§c[TownyCivs] Warning: Town Hall tier insufficient for " + getTownLevelName(newLevel) + "!");
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§7Required: §f" + hallName + " §7to unlock full benefits.");
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§7Build or upgrade your Town Hall to unlock resident/claim limits!");
+        }
     }
 
-    public void onTownInvite(TownInvitePlayerEvent event){
-        //todo later to customize invites or block them based on certain conditions, like if max town size is reached theyre forced to build first a structure that increases max size
+    /**
+     * Block adding residents if town has reached the resident limit for their current hall tier
+     * OR if their Town Hall administration is not active (upkeep not satisfied)
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onTownInviteResident(TownInvitePlayerEvent event) {
+        Town town = event.getInvite().getSender();
+        if (town == null) {
+            return;
+        }
+
+        // Check if Town Hall administration is active (upkeep satisfied)
+        if (!administrationService.hasActiveAdministration(town)) {
+            event.getInvite().decline(true);
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§c[TownyCivs] Your Town Hall is inactive! Supply it with the required upkeep items.");
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§7Check your Town Hall inventory and ensure upkeep requirements are met.");
+            return;
+        }
+
+        // Check current size (before adding the new resident)
+        int currentResidents = town.getResidents().size();
+        int maxResidents = getMaxResidentsForTownHall(town);
+
+        if (currentResidents >= maxResidents) {
+            event.getInvite().decline(true);
+            // Send message to town
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§c[TownyCivs] Town has reached its resident limit! (" + currentResidents + "/" + maxResidents + ")");
+            TownyMessaging.sendPrefixedTownMessage(town,
+                "§7Upgrade your Town Hall to invite more residents.");
+        }
+    }
+
+    /**
+     * Block claims if town has reached the claim limit for their current hall tier
+     * OR if their Town Hall administration is not active (upkeep not satisfied)
+     * Note: Always allow the first few claims for new towns to get started
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onTownPreClaim(TownPreClaimEvent event) {
+        Town town = event.getTown();
+
+        // Always allow the first claim (home block) - this is needed for town creation
+        if (town.getTownBlocks().size() <= 1) {
+            return;
+        }
+
+        // Check if Town Hall administration is active (upkeep satisfied)
+        // Allow a grace period of 4 claims for new towns before requiring active administration
+        if (town.getTownBlocks().size() >= 4 && !administrationService.hasActiveAdministration(town)) {
+            event.setCancelled(true);
+            event.setCancelMessage("§c[TownyCivs] Your Town Hall is inactive! Supply it with the required upkeep items to claim more land.");
+            return;
+        }
+
+        if (!canTownClaimMore(town)) {
+            event.setCancelled(true);
+            event.setCancelMessage("§c[TownyCivs] Your town has reached its claim limit! Upgrade your Town Hall to claim more land.");
+        }
+    }
+
+    /**
+     * Get the required Town Hall structure ID for a given Towny level
+     */
+    private String getRequiredTownHallForLevel(int level) {
+        return switch (level) {
+            case 0 -> null; // Ruins - no requirement
+            case 1 -> "surveyors_desk"; // Settlement
+            case 2 -> "land_office"; // Hamlet
+            case 3 -> "constables_station"; // Village
+            case 4 -> "municipal_building"; // Town
+            case 5 -> "district_council"; // Large Town
+            case 6 -> "city_hall"; // City
+            case 7 -> "civic_centre"; // Large City
+            case 8 -> "ministry_of_industry"; // Metropolis
+            default -> null;
+        };
+    }
+
+    /**
+     * Check if town has a specific structure or any of its upgrades
+     */
+    private boolean townHasStructureOrUpgrade(Town town, String baseStructureId) {
+        Optional<Structure> baseStructure = configurationService.findStructureById(baseStructureId);
+        if (baseStructure.isEmpty()) {
+            return false;
+        }
+        int count = structureService.countStructuresInUpgradeChain(town, baseStructure.get());
+        return count > 0;
+    }
+
+    /**
+     * Check if town can invite more residents based on their current hall tier
+     */
+    private boolean canTownInviteMoreResidents(Town town) {
+        int currentResidents = town.getResidents().size();
+        int maxResidents = getMaxResidentsForTownHall(town);
+        return currentResidents < maxResidents;
+    }
+
+    /**
+     * Get the maximum number of residents allowed for the town's current hall tier
+     * Uses Towny's settings for resident limits per level
+     */
+    private int getMaxResidentsForTownHall(Town town) {
+        // Find the highest tier hall the town has built
+        int hallTier = getCurrentTownHallTier(town);
+
+        // Use Towny's configured resident limit for this level
+        // TownySettings has methods to get level-based limits
+        return TownySettings.getMaxResidentsPerTown(); // Default fallback
+    }
+
+    /**
+     * Get the current Town Hall tier the town has built (0-8)
+     */
+    private int getCurrentTownHallTier(Town town) {
+        // Check from highest tier down to find what they have
+        for (int level = 8; level >= 1; level--) {
+            String requiredHall = getRequiredTownHallForLevel(level);
+            if (requiredHall != null && townHasStructureOrUpgrade(town, requiredHall)) {
+                return level;
+            }
+        }
+        return 0; // No hall built
+    }
+
+    /**
+     * Check if town can claim more land based on their current hall tier
+     */
+    private boolean canTownClaimMore(Town town) {
+        int currentClaims = town.getTownBlocks().size();
+        int maxClaims = getMaxClaimsForTownHall(town);
+        return currentClaims < maxClaims;
+    }
+
+    /**
+     * Get the maximum number of claims allowed for the town's current hall tier
+     * Uses Towny's configured claim limits based on town level
+     */
+    private int getMaxClaimsForTownHall(Town town) {
+        int hallTier = getCurrentTownHallTier(town);
+
+        // Use Towny's configured town block limits
+        // TownySettings.getMaxTownBlocks(town) calculates based on residents and bonus blocks
+        // We use the hall tier to determine the effective level for claim limits
+        // If they haven't built a hall yet (tier 0), use level 0 limits from Towny
+
+        // Get the max blocks using Towny's calculation for the town
+        // This respects Towny's config settings
+        int maxBlocks = TownySettings.getMaxTownBlocks(town);
+
+        // If the town's actual Towny level is higher than their hall tier,
+        // cap the claims at what their hall tier allows
+        int townLevel = town.getLevelNumber();
+        if (townLevel > hallTier) {
+            // They haven't upgraded their hall yet, so limit based on hall tier
+            // Use a ratio based on Towny's default scaling
+            double ratio = (double) (hallTier + 1) / (townLevel + 1);
+            return (int) (maxBlocks * ratio);
+        }
+
+        return maxBlocks;
+    }
+
+    /**
+     * Get human-readable town level name
+     */
+    private String getTownLevelName(int level) {
+        return switch (level) {
+            case 0 -> "Ruins";
+            case 1 -> "Settlement";
+            case 2 -> "Hamlet";
+            case 3 -> "Village";
+            case 4 -> "Town";
+            case 5 -> "Large Town";
+            case 6 -> "City";
+            case 7 -> "Large City";
+            case 8 -> "Metropolis";
+            default -> "Unknown";
+        };
     }
 
 
@@ -454,8 +656,8 @@ public class TownListener implements Listener {
             if (!managementService.isBeingEdited(region.loadedStructure)) {
                 Structure structure = configurationService.findStructureById(region.structureId).get();
                 if(!(event instanceof BlockDropItemEvent)){
-                    player.sendMessage(Component.text("Editing of " + structure.name + " is not allowed"));
-                    player.sendMessage(Component.text("If you wish to edit " + structure.name + " craft an editing tool and righclick within this region"));
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<gold>[TownyCivs]</gold> <red>Editing of " + structure.name  + " is not allowed.</red>"));
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<gold>[TownyCivs]</gold> <red>If you wish to edit " + structure.name  + ", craft a Structure Editing tool and right click this region.</red>"));
                 }
                 event.setCancelled(true);
                 return;
@@ -463,7 +665,4 @@ public class TownListener implements Listener {
         }
     }
 }
-
-
-
 

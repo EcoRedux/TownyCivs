@@ -69,7 +69,7 @@ public class MechanicService {
 
         prodMech(new ItemProduction());
         prodMech(new MoneyProduction());
-
+        prodMech(new Administration()); // Town Hall administration mechanic
 
         Bukkit.getPluginManager().callEvent(new RegisterMechanicEvent(this));
     }

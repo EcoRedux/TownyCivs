@@ -62,7 +62,7 @@ public class ItemService {
         ItemStack itemStack = getTownAdministrationTool();
         ShapelessRecipe shapelessRecipe = new ShapelessRecipe(recipe, itemStack);
         shapelessRecipe.addIngredient(Material.BOOK);
-        shapelessRecipe.addIngredient(Material.EMERALD);
+        shapelessRecipe.addIngredient(Material.PAPER);
 
         Bukkit.getServer().addRecipe(shapelessRecipe);
 

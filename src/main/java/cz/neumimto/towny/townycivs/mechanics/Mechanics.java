@@ -17,4 +17,5 @@ public interface Mechanics {
     String MONEY_PRODUCTION = "money";
     String EXPERIENCE = "experience";
     String UPGRADE = "upgrade";
+    String ADMINISTRATION = "administration";
 }

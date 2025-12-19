@@ -41,7 +41,7 @@ public class HelpMenu1Gui extends TCGui {
     @Override
     public Map<String, List<GuiCommand>> getPaneData(CommandSender commandSender, String param, GuiConfig guiConfig) {
         Map<String, List<GuiCommand>> map = new HashMap<>();
-        map.put("Recipe", List.of(new GuiCommand(new ItemStack(Material.BOOK)), new GuiCommand(new ItemStack(Material.EMERALD))));
+        map.put("Recipe", List.of(new GuiCommand(new ItemStack(Material.BOOK)), new GuiCommand(new ItemStack(Material.PAPER))));
         map.put("Result", List.of(new GuiCommand(ItemService.getTownAdministrationTool())));
 
         ItemStack itemStack = new ItemStack(Material.PAPER);

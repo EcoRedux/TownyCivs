@@ -43,7 +43,7 @@ public enum TutorialStep {
         "<gray>Craft the Town Administration tool to access blueprints! You can type /townycivs and click on the recipe/knowledge book to learn the recipe for it!</gray>",
         "",
         "<yellow>Recipe:</yellow>",
-        "<white>Book + Emerald (shapeless)</white>",
+        "<white>Book + Paper (shapeless)</white>",
         "",
         "<gray>This tool opens the Blueprint Shop.</gray>",
         "<gold>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</gold>"),

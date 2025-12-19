@@ -325,85 +325,24 @@ public class RegionGui extends TCGui {
 
         List<Structure.LoadedPair<Mechanic<Object>, Object>> upkeep = region.loadedStructure.structureDef.upkeep;
 
-        List<Structure.LoadedPair<Mechanic<Object>, Object>> production = region.loadedStructure.structureDef.production;
+        // Create town context for mechanics to use
+        TownContext townContext = new TownContext();
+        townContext.town = TownyAPI.getInstance().getTown(region.loadedStructure.town);
+        townContext.loadedStructure = region.loadedStructure;
+        townContext.structure = region.loadedStructure.structureDef;
 
+        // Let each mechanic provide its own GUI items
         for (Structure.LoadedPair<Mechanic<Object>, Object> m : upkeep) {
-            String mechanicId = m.mechanic.id();
+            @SuppressWarnings("unchecked")
+            Mechanic<Object> mechanic = m.mechanic;
+            Object configValue = m.configValue;
 
-            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPKEEP)) {
-                cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
-                    (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
+            // Get upkeep GUI items from the mechanic itself
+            List<ItemStack> guiItems = mechanic.getUpkeepGuiItems(townContext, configValue);
 
-                boolean requireAll = itemList.requireAll != null ? itemList.requireAll : true;
-
-                if (!requireAll) {
-                    ItemStack bundleStack = new ItemStack(Material.BUNDLE);
-                    bundleStack.editMeta(itemMeta -> {
-                        BundleMeta bundleMeta = (BundleMeta) itemMeta;
-                        bundleMeta.displayName(mm.deserialize("<aqua>Alternative Options (ANY ONE)</aqua>"));
-                        var lore = new ArrayList<Component>();
-                        lore.add(mm.deserialize("<gray>Any one of these items works:</gray>"));
-
-                        // Add each item to the bundle
-                        for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
-                            ItemStack itemStack = configItem.toItemStack();
-                            bundleMeta.addItem(itemStack);
-
-                            // Add info to lore
-                            String itemName = itemStack.getType().name();
-                            if (configItem.consumeItem != null && configItem.consumeItem) {
-                                int amount = configItem.consumeAmount != null ? configItem.consumeAmount : 1;
-                                lore.add(mm.deserialize("<white>• " + itemName + " <red>(Consumed: " + amount + ")</red></white>"));
-                            } else if (configItem.damageAmount != null) {
-                                lore.add(mm.deserialize("<white>• " + itemName + " <gold>(Damage: " + configItem.damageAmount + ")</gold></white>"));
-                            } else {
-                                lore.add(mm.deserialize("<white>• " + itemName + "</white>"));
-                            }
-                        }
-                        bundleMeta.lore(lore);
-                    });
-                    staticPane.addItem(new GuiItem(bundleStack, e -> e.setCancelled(true)), x, y);
-                    x++;
-                    if (x == 9) {
-                        x = 0;
-                        y++;
-                    }
-                } else {
-                    for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
-                        ItemStack itemStack = configItem.toItemStack();
-                        itemStack.editMeta(itemMeta -> {
-                            var lore = new ArrayList<Component>();
-                            lore.add(mm.deserialize("<yellow>Required Item</yellow>"));
-                            if (configItem.consumeItem != null && configItem.consumeItem) {
-                                lore.add(mm.deserialize("<red>Consumed: " + (configItem.consumeAmount != null ? configItem.consumeAmount : 1) + "x</red>"));
-                            }
-                            if (configItem.damageAmount != null) {
-                                lore.add(mm.deserialize("<gold>Damage: " + configItem.damageAmount + "</gold>"));
-                            }
-                            itemMeta.lore(lore);
-                        });
-                        staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
-                        x++;
-                        if (x == 9) {
-                            x = 0;
-                            y++;
-                        }
-                    }
-                }
-            }
-
-            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_UPKEEP)) {
-                // MoneyUpkeep - show as paper item
-                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper doubleWrapper = (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) m.configValue;
-
-                ItemStack moneyItem = new ItemStack(Material.PAPER);
-                moneyItem.editMeta(itemMeta -> {
-                    itemMeta.displayName(mm.deserialize("<gold>Money Upkeep</gold>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<yellow>Cost: $" + doubleWrapper.value + "</yellow>"));
-                    itemMeta.lore(lore);
-                });
-                staticPane.addItem(new GuiItem(moneyItem, e -> e.setCancelled(true)), x, y);
+            // Add all items to the GUI
+            for (ItemStack itemStack : guiItems) {
+                staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
                 x++;
                 if (x == 9) {
                     x = 0;
@@ -434,27 +373,28 @@ public class RegionGui extends TCGui {
 
         List<Structure.LoadedPair<Mechanic<Object>, Object>> production = region.loadedStructure.structureDef.production;
 
+        // Create town context for mechanics to use
+        TownContext townContext = new TownContext();
+        townContext.town = TownyAPI.getInstance().getTown(region.loadedStructure.town);
+        townContext.loadedStructure = region.loadedStructure;
+        townContext.structure = region.loadedStructure.structureDef;
+
+        // Let each mechanic provide its own GUI items
         for (Structure.LoadedPair<Mechanic<Object>, Object> m : production) {
-            String mechanicId = m.mechanic.id();
+            @SuppressWarnings("unchecked")
+            Mechanic<Object> mechanic = m.mechanic;
+            Object configValue = m.configValue;
 
-            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.ITEM_PRODUCTION)) {
-                // ItemProduction - show items that will be produced
-                cz.neumimto.towny.townycivs.mechanics.common.ItemList itemList =
-                    (cz.neumimto.towny.townycivs.mechanics.common.ItemList) m.configValue;
+            // Get GUI items from the mechanic itself
+            List<ItemStack> guiItems = mechanic.getGuiItems(townContext, configValue);
 
-                for (cz.neumimto.towny.townycivs.mechanics.common.ItemList.ConfigItem configItem : itemList.configItems) {
-                    ItemStack itemStack = configItem.toItemStack();
-                    itemStack.editMeta(itemMeta -> {
-                        var lore = new ArrayList<Component>();
-                        lore.add(mm.deserialize("<yellow>Produced Item</yellow>"));
-                        itemMeta.lore(lore);
-                    });
-                    staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
-                    x++;
-                    if (x == 9) {
-                        x = 0;
-                        y++;
-                    }
+            // Add all items to the GUI
+            for (ItemStack itemStack : guiItems) {
+                staticPane.addItem(new GuiItem(itemStack, e -> e.setCancelled(true)), x, y);
+                x++;
+                if (x == 9) {
+                    x = 0;
+                    y++;
                 }
             }
         }
@@ -588,109 +528,27 @@ public class RegionGui extends TCGui {
             upgradeReqs = new ArrayList<>();
         }
 
+        // Let each mechanic provide its own GUI items
         for (Structure.LoadedPair<Mechanic<?>, ?> req : upgradeReqs) {
-            String mechanicId = req.mechanic.id();
-
             // Skip the upgrade mechanic since we now use upgradePath field
-            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPGRADE)) {
+            if (req.mechanic.id().equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.UPGRADE)) {
                 continue;
             }
 
             @SuppressWarnings("unchecked")
             Mechanic<Object> mechanic = (Mechanic<Object>) req.mechanic;
-            boolean isMet = mechanic.check(townContext, req.configValue);
 
-            ItemStack reqItem;
+            // Get upgrade requirement GUI items from the mechanic itself
+            List<ItemStack> guiItems = mechanic.getUpgradeRequirementGuiItems(townContext, req.configValue);
 
-            // Price requirement
-            if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.PRICE)) {
-                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper price =
-                    (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) req.configValue;
-
-                reqItem = new ItemStack(isMet ? Material.GOLD_INGOT : Material.COAL);
-                reqItem.editMeta(meta -> {
-                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Price</green>" : "<red>✗ Price</red>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<yellow>Cost: $" + price.value + "</yellow>"));
-                    double balance = townContext.town.getAccount().getHoldingBalance();
-                    lore.add(mm.deserialize("<gray>Town Balance: $" + String.format("%.2f", balance) + "</gray>"));
-                    lore.add(isMet ? mm.deserialize("<green>Requirement met!</green>") : mm.deserialize("<red>Not enough funds!</red>"));
-                    meta.lore(lore);
-                });
-            }
-            // Town level requirement
-            else if (mechanicId.equals(Mechanics.TOWN_RANK) ||
-                     mechanicId.equals(Mechanics.TOWN_RANK_REQUIREMENT)) {
-                cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper level =
-                    (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) req.configValue;
-
-                reqItem = new ItemStack(isMet ? Material.BELL: Material.IRON_BARS);
-                reqItem.editMeta(meta -> {
-                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Town Level</green>" : "<red>✗ Town Level</red>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<yellow>Required Level: " + (int) level.value + "</yellow>"));
-                    lore.add(isMet ? mm.deserialize("<green>Requirement met!</green>") : mm.deserialize("<red>Town level too low!</red>"));
-                    meta.lore(lore);
-                });
-            }
-            // Permission requirement
-            else if (mechanicId.equals(Mechanics.PERMISSION)) {
-                cz.neumimto.towny.townycivs.mechanics.common.StringWrapper perm =
-                    (cz.neumimto.towny.townycivs.mechanics.common.StringWrapper) req.configValue;
-
-                reqItem = new ItemStack(isMet ? Material.NAME_TAG : Material.BARRIER);
-                reqItem.editMeta(meta -> {
-                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Permission</green>" : "<red>✗ Permission</red>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<yellow>Required: " + perm.value + "</yellow>"));
-                    lore.add(isMet ? mm.deserialize("<green>You have permission!</green>") : mm.deserialize("<red>Missing permission!</red>"));
-                    meta.lore(lore);
-                });
-            }
-            // Structure requirement
-            else if (mechanicId.equals(Mechanics.STRUCTURE)) {
-                cz.neumimto.towny.townycivs.mechanics.common.StringWrapper structureReq =
-                    (cz.neumimto.towny.townycivs.mechanics.common.StringWrapper) req.configValue;
-
-                reqItem = new ItemStack(isMet ? Material.SMITHING_TABLE : Material.CRAFTING_TABLE);
-                reqItem.editMeta(meta -> {
-                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Structure Required</green>" : "<red>✗ Structure Required</red>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<yellow>Requires: " + structureReq.value + "</yellow>"));
-                    lore.add(isMet ? mm.deserialize("<green>Structure exists!</green>") : mm.deserialize("<red>Build this structure first!</red>"));
-                    meta.lore(lore);
-                });
-            }
-
-            else if (mechanicId.equals(Mechanics.EXPERIENCE)) {
-                DoubleWrapper experienceReq = (DoubleWrapper) req.configValue;
-
-                reqItem = new ItemStack(isMet ? Material.EXPERIENCE_BOTTLE : Material.POTION);
-                reqItem.editMeta(meta -> {
-                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Experience Required</green>" : "<red>✗ Experience Required</red>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<yellow>Requires: " + experienceReq.value + "</yellow>"));
-                    lore.add(isMet ? mm.deserialize("<green>Enough Experience!</green>") : mm.deserialize("<red>Get more Experience first!</red>"));
-                    meta.lore(lore);
-                });
-            }
-            // Generic mechanic
-            else {
-                reqItem = new ItemStack(isMet ? Material.LIME_DYE : Material.RED_DYE);
-                reqItem.editMeta(meta -> {
-                    meta.displayName(mm.deserialize(isMet ? "<green>✓ " + mechanicId + "</green>" : "<red>✗ " + mechanicId + "</red>"));
-                    var lore = new ArrayList<Component>();
-                    lore.add(mm.deserialize("<gray>Mechanic: " + mechanicId + "</gray>"));
-                    lore.add(isMet ? mm.deserialize("<green>Requirement met!</green>") : mm.deserialize("<red>Requirement not met!</red>"));
-                    meta.lore(lore);
-                });
-            }
-
-            staticPane.addItem(new GuiItem(reqItem, e -> e.setCancelled(true)), x, y);
-            x++;
-            if (x == 9) {
-                x = 0;
-                y++;
+            // Add all items to the GUI
+            for (ItemStack reqItem : guiItems) {
+                staticPane.addItem(new GuiItem(reqItem, e -> e.setCancelled(true)), x, y);
+                x++;
+                if (x == 9) {
+                    x = 0;
+                    y++;
+                }
             }
         }
 

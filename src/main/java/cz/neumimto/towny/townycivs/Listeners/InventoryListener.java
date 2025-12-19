@@ -58,7 +58,7 @@ public class InventoryListener implements Listener {
         if (event.getPlayer() instanceof Player p) {
             // Only close if the inventory being closed is the structure inventory
             StructureInventoryService.StructAndInv structAndInv = sis.getPlayerStructAndInv(p.getUniqueId());
-            if (structAndInv != null && structAndInv.inventory().equals(event.getInventory())) {
+            if (structAndInv != null && structAndInv.inventory() != null && structAndInv.inventory().equals(event.getInventory())) {
                 sis.closeInventory(p);
             }
         }
