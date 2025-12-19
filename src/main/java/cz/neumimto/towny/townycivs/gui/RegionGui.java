@@ -14,7 +14,9 @@ import cz.neumimto.towny.townycivs.gui.api.GuiCommand;
 import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
 import cz.neumimto.towny.townycivs.mechanics.ItemUpkeep;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
+import cz.neumimto.towny.townycivs.mechanics.Mechanics;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
+import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
@@ -217,28 +219,36 @@ public class RegionGui extends TCGui {
         boolean canShowUpgrade = false;
 
         if (upgradePath != null && !upgradePath.isEmpty()) {
-            // Check if upgrade chain already exceeds base structure MaxCount
+            // When upgrading, we're REPLACING the current structure (same UUID), not adding a new one
+            // The total count in the upgrade chain stays the same after upgrading
+            // Example: 2 coal_mine → upgrade 1 → 1 coal_mine + 1 advanced_coal_mine = still 2 total
+
             Structure baseStructure = townContext.loadedStructure.structureDef;
-            Integer baseMaxCount = baseStructure.maxCount;
-
-            // Also check target structure MaxCount
             var targetStructureOpt = configurationService.findStructureById(upgradePath);
-
             boolean blockedByCount = false;
 
-            if (baseMaxCount != null && baseMaxCount > 0) {
-                int currentChainCount = structureService.countStructuresInUpgradeChain(town, baseStructure);
-                if (currentChainCount >= baseMaxCount) {
-                    blockedByCount = true;
-                }
-            }
-
-            // Check target structure MaxCount
-            if (!blockedByCount && targetStructureOpt.isPresent()) {
+            // Only check MaxCount if the target structure has a limit
+            if (targetStructureOpt.isPresent()) {
                 Structure targetStructure = targetStructureOpt.get();
+
                 if (targetStructure.maxCount != null && targetStructure.maxCount > 0) {
-                    int targetCount = structureService.findTownStructureById(town, targetStructure).count;
-                    if (targetCount >= targetStructure.maxCount) {
+                    // Find the root of the upgrade chain to check against
+                    // For coal_mine → advanced_coal_mine, the root is coal_mine
+                    Structure rootStructure = baseStructure;
+                    if (baseStructure.upgradeFrom != null && !baseStructure.upgradeFrom.isEmpty()) {
+                        // Current structure is already an upgrade, find its base
+                        var baseOpt = configurationService.findStructureById(baseStructure.upgradeFrom);
+                        if (baseOpt.isPresent()) {
+                            rootStructure = baseOpt.get();
+                        }
+                    }
+
+                    // Count total structures in this upgrade chain
+                    int chainCount = structureService.countStructuresInUpgradeChain(town, rootStructure);
+
+                    // After upgrading, the chain count stays the same (we're replacing, not adding)
+                    // Only block if we've somehow already exceeded the limit
+                    if (chainCount > targetStructure.maxCount) {
                         blockedByCount = true;
                     }
                 }
@@ -609,12 +619,12 @@ public class RegionGui extends TCGui {
                 });
             }
             // Town level requirement
-            else if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_RANK) ||
-                     mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.TOWN_RANK_REQUIREMENT)) {
+            else if (mechanicId.equals(Mechanics.TOWN_RANK) ||
+                     mechanicId.equals(Mechanics.TOWN_RANK_REQUIREMENT)) {
                 cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper level =
                     (cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper) req.configValue;
 
-                reqItem = new ItemStack(isMet ? Material.EXPERIENCE_BOTTLE : Material.GLASS_BOTTLE);
+                reqItem = new ItemStack(isMet ? Material.BELL: Material.IRON_BARS);
                 reqItem.editMeta(meta -> {
                     meta.displayName(mm.deserialize(isMet ? "<green>✓ Town Level</green>" : "<red>✗ Town Level</red>"));
                     var lore = new ArrayList<Component>();
@@ -624,7 +634,7 @@ public class RegionGui extends TCGui {
                 });
             }
             // Permission requirement
-            else if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.PERMISSION)) {
+            else if (mechanicId.equals(Mechanics.PERMISSION)) {
                 cz.neumimto.towny.townycivs.mechanics.common.StringWrapper perm =
                     (cz.neumimto.towny.townycivs.mechanics.common.StringWrapper) req.configValue;
 
@@ -638,7 +648,7 @@ public class RegionGui extends TCGui {
                 });
             }
             // Structure requirement
-            else if (mechanicId.equals(cz.neumimto.towny.townycivs.mechanics.Mechanics.STRUCTURE)) {
+            else if (mechanicId.equals(Mechanics.STRUCTURE)) {
                 cz.neumimto.towny.townycivs.mechanics.common.StringWrapper structureReq =
                     (cz.neumimto.towny.townycivs.mechanics.common.StringWrapper) req.configValue;
 
@@ -648,6 +658,19 @@ public class RegionGui extends TCGui {
                     var lore = new ArrayList<Component>();
                     lore.add(mm.deserialize("<yellow>Requires: " + structureReq.value + "</yellow>"));
                     lore.add(isMet ? mm.deserialize("<green>Structure exists!</green>") : mm.deserialize("<red>Build this structure first!</red>"));
+                    meta.lore(lore);
+                });
+            }
+
+            else if (mechanicId.equals(Mechanics.EXPERIENCE)) {
+                DoubleWrapper experienceReq = (DoubleWrapper) req.configValue;
+
+                reqItem = new ItemStack(isMet ? Material.EXPERIENCE_BOTTLE : Material.POTION);
+                reqItem.editMeta(meta -> {
+                    meta.displayName(mm.deserialize(isMet ? "<green>✓ Experience Required</green>" : "<red>✗ Experience Required</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<yellow>Requires: " + experienceReq.value + "</yellow>"));
+                    lore.add(isMet ? mm.deserialize("<green>Enough Experience!</green>") : mm.deserialize("<red>Get more Experience first!</red>"));
                     meta.lore(lore);
                 });
             }

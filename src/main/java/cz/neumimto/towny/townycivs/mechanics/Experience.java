@@ -5,12 +5,12 @@ import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
 public class Experience implements Mechanic<DoubleWrapper> {
     @Override
     public boolean check(TownContext townContext, DoubleWrapper configContext) {
-        return townContext.player.getExp() >= configContext.value;
+        return townContext.player.getTotalExperience() >= configContext.value;
     }
 
     @Override
     public void nokmessage(TownContext townContext, DoubleWrapper configuration) {
-        townContext.player.sendMessage("§6[TownyCivs] §cNot enough experience to build §b" + townContext.structure.name + "§c. You need at least §b" + configuration.value + "§c experience.");
+        townContext.player.sendMessage("§6[TownyCivs] §cNot enough experience for" + townContext.structure.name + "§c. You need at least §b" + configuration.value + "§c experience.");
     }
 
     public void postAction(TownContext townContext, DoubleWrapper configContext) {

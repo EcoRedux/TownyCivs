@@ -127,7 +127,8 @@ public class StructureService {
     private ItemStack toBlueprintItemStack(Structure structure) {
         ItemStack itemStack = new ItemStack(structure.material);
         itemStack.editMeta(itemMeta -> {
-            itemMeta.displayName(Component.text("Blueprint - " + structure.name));
+            net.kyori.adventure.text.minimessage.MiniMessage mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage();
+            itemMeta.displayName(mm.deserialize("Blueprint - " + structure.name));
             itemMeta.setCustomModelData(structure.customModelData);
         });
         return itemStack;

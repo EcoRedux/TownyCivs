@@ -402,6 +402,8 @@ public class TownListener implements Listener {
 
     public void onTownLevelUp(TownLevelIncreaseEvent event) {
         //todo later to block towns from leveling up if they dont have the necessary structures like town hall
+        event.getTown().getLevelNumber();
+        event.
     }
 
     public void onTownInvite(TownInvitePlayerEvent event){
