@@ -270,6 +270,18 @@ public class TownListener implements Listener {
                 Block block = loc.getBlock();
                 player.sendBlockChange(loc, block.getBlockData());
             }
+
+            // just incase the above misses some blocks, do a radius update
+            int radius = 5;
+
+            for (int x = -radius; x <= radius; x++) {
+                for (int y = -radius; y <= radius; y++) {
+                    for (int z = -radius; z <= radius; z++) {
+                        Block block = player.getLocation().add(x, y, z).getBlock();
+                        player.sendBlockChange(block.getLocation(), block.getBlockData());
+                    }
+                }
+            }
         }
     }
 

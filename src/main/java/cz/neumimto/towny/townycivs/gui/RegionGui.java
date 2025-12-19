@@ -55,8 +55,69 @@ public class RegionGui extends TCGui {
     @Inject
     private cz.neumimto.towny.townycivs.tutorial.TutorialManager tutorialManager;
 
+    // Track which players have the region GUI open and which region
+    private final Map<UUID, UUID> openRegionGuis = new HashMap<>();
+    private int refreshTaskId = -1;
+
     public RegionGui() {
         super("Region.conf", TownyCivs.INSTANCE.getDataFolder().toPath());
+        startRefreshTask();
+    }
+
+    /**
+     * Start a task that refreshes open GUIs every second (20 ticks)
+     */
+    private void startRefreshTask() {
+        if (refreshTaskId != -1) {
+            return; // Already running
+        }
+
+        // Use Bukkit scheduler for repeating task
+        refreshTaskId = TownyCivs.INSTANCE.getServer().getScheduler().scheduleSyncRepeatingTask(
+            TownyCivs.INSTANCE,
+            () -> {
+                // Refresh all open region GUIs
+                for (Map.Entry<UUID, UUID> entry : new HashMap<>(openRegionGuis).entrySet()) {
+                    UUID playerUuid = entry.getKey();
+                    UUID regionUuid = entry.getValue();
+
+                    Player player = TownyCivs.INSTANCE.getServer().getPlayer(playerUuid);
+                    if (player == null || !player.isOnline()) {
+                        openRegionGuis.remove(playerUuid);
+                        continue;
+                    }
+
+                    // Refresh the GUI
+                    Region region = subclaimService.getRegion(regionUuid);
+                    if (region != null) {
+                        updateGuiSilently(player, region);
+                    }
+                }
+            },
+            20L, // Initial delay: 1 second
+            20L  // Repeat every: 1 second
+        );
+    }
+
+    /**
+     * Updates the GUI items without closing and reopening the inventory
+     */
+    private void updateGuiSilently(Player player, Region region) {
+        try {
+            // Recreate the GUI data
+            Map<String, List<GuiCommand>> paneData = getPaneData(player, region.uuid.toString());
+
+            // Update only the status item in the player's current view
+            List<GuiCommand> statusCommands = paneData.get("Status");
+            if (statusCommands != null && !statusCommands.isEmpty()) {
+                ItemStack statusItem = statusCommands.getFirst().getItem();
+                // Update the status slot (slot 13 based on Region.conf)
+                player.getOpenInventory().getTopInventory().setItem(13, statusItem);
+            }
+        } catch (Exception e) {
+            // If update fails, just skip this cycle
+            openRegionGuis.remove(player.getUniqueId());
+        }
     }
 
     public void display(Player player, Region region) {
@@ -70,8 +131,18 @@ public class RegionGui extends TCGui {
             }
         }
 
+        // Track that this player has the region GUI open
+        openRegionGuis.put(player.getUniqueId(), region.uuid);
+
         ChestGui chestGui = loadGui(player, region.uuid.toString());
         chestGui.show(player);
+    }
+
+    /**
+     * Call this when a player closes the region GUI
+     */
+    public void onGuiClose(Player player) {
+        openRegionGuis.remove(player.getUniqueId());
     }
 
     @Override
@@ -177,9 +248,32 @@ public class RegionGui extends TCGui {
         });
         map.put("Location", List.of(new GuiCommand(location, e -> e.setCancelled(true))));
 
+        // Calculate ticks remaining until next production
+        long currentTime = System.currentTimeMillis();
+        long timeUntilNextTick;
+
+
+
+        // Use nextTickTime if available, otherwise calculate from lastTickTime
+        if (region.loadedStructure.nextTickTime > 0) {
+            timeUntilNextTick = region.loadedStructure.nextTickTime - currentTime;
+        } else if (region.loadedStructure.lastTickTime > 0) {
+            long tickPeriodMs = region.loadedStructure.structureDef.period * 50L;
+            long timeSinceLastTick = currentTime - region.loadedStructure.lastTickTime;
+            timeUntilNextTick = tickPeriodMs - timeSinceLastTick;
+        } else {
+            // Structure just placed, assume full period
+            timeUntilNextTick = region.loadedStructure.structureDef.period * 50L;
+        }
+
+        long secondsRemaining = Math.max(0, timeUntilNextTick / 1000L);
+
         ItemStack status = new ItemStack(Material.LIME_WOOL);
         status.editMeta(itemMeta -> {
             itemMeta.displayName(mm.deserialize("<green>Your Structure is running smoothly.</green>"));
+            var lore = new ArrayList<Component>();
+            lore.add(mm.deserialize("<gray>Next production in: <yellow>" + secondsRemaining + "s</yellow></gray>"));
+            itemMeta.lore(lore);
         });
 
         List<Structure.LoadedPair<Mechanic<Object>, Object>> upkeep = region.loadedStructure.structureDef.upkeep;
@@ -188,12 +282,19 @@ public class RegionGui extends TCGui {
                 status = new ItemStack(Material.RED_WOOL);
                 status.editMeta(itemMeta -> {
                     itemMeta.displayName(mm.deserialize("<red>Your Structure has missing upkeep!</red>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<gray>Production paused due to missing upkeep</gray>"));
+                    lore.add(mm.deserialize("<gray>Would process in: <dark_gray>" + secondsRemaining + "s</dark_gray></gray>"));
+                    itemMeta.lore(lore);
                 });
                 break;
             }else{
                 status = new ItemStack(Material.LIME_WOOL);
                 status.editMeta(itemMeta -> {
                     itemMeta.displayName(mm.deserialize("<green>Your Structure is running smoothly.</green>"));
+                    var lore = new ArrayList<Component>();
+                    lore.add(mm.deserialize("<gray>Next production in: <yellow>" + secondsRemaining + "s</yellow></gray>"));
+                    itemMeta.lore(lore);
                 });
             }
 
@@ -378,6 +479,7 @@ public class RegionGui extends TCGui {
         townContext.town = TownyAPI.getInstance().getTown(region.loadedStructure.town);
         townContext.loadedStructure = region.loadedStructure;
         townContext.structure = region.loadedStructure.structureDef;
+
 
         // Let each mechanic provide its own GUI items
         for (Structure.LoadedPair<Mechanic<Object>, Object> m : production) {

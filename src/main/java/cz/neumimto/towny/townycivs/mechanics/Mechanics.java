@@ -2,7 +2,7 @@ package cz.neumimto.towny.townycivs.mechanics;
 
 public interface Mechanics {
 
-    String ITEM_PRODUCTION = "item";
+    String ITEM_PRODUCTION = "item_production";
     String UPKEEP = "item_upkeep";
     String STRUCTURE = "structure";
     String PERMISSION = "permission";
@@ -18,4 +18,5 @@ public interface Mechanics {
     String EXPERIENCE = "experience";
     String UPGRADE = "upgrade";
     String ADMINISTRATION = "administration";
+    String CONDITIONAL_ITEM_PRODUCTION = "conditional_item_production";
 }

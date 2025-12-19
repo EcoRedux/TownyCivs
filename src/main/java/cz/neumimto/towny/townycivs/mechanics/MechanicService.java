@@ -70,6 +70,7 @@ public class MechanicService {
         prodMech(new ItemProduction());
         prodMech(new MoneyProduction());
         prodMech(new Administration()); // Town Hall administration mechanic
+        prodMech(new ConditionalItemProduction()); // Conditional crafting production
 
         Bukkit.getPluginManager().callEvent(new RegisterMechanicEvent(this));
     }

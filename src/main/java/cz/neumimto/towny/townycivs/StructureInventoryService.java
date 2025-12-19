@@ -4,6 +4,7 @@ import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.mechanics.common.ItemList;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -154,7 +155,7 @@ public class StructureInventoryService {
     }
 
     private Inventory createStructureInventory(LoadedStructure structure) {
-        Inventory inventory = Bukkit.getServer().createInventory(null, 27, Component.text(structure.structureDef.name));
+        Inventory inventory = Bukkit.getServer().createInventory(null, 27, MiniMessage.miniMessage().deserialize(structure.structureDef.name));
         if (structure.structureDef.inventorySize > 0) {
             for (int i = structure.structureDef.inventorySize; i < inventory.getSize(); i++) {
                 inventory.setItem(i, itemService.getInventoryBlocker());
