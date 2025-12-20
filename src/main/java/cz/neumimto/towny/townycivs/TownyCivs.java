@@ -88,6 +88,7 @@ public class TownyCivs extends JavaPlugin {
                     bind(ItemService.class);
                     bind(cz.neumimto.towny.townycivs.tutorial.TutorialManager.class);
                     bind(cz.neumimto.towny.townycivs.tutorial.TutorialListener.class);
+                    bind(cz.neumimto.towny.townycivs.power.PowerService.class);
                 }
             });
         }
@@ -124,6 +125,7 @@ public class TownyCivs extends JavaPlugin {
             Bukkit.getPluginManager().registerEvents(injector.getInstance(TownListener.class), this);
             Bukkit.getPluginManager().registerEvents(injector.getInstance(InventoryListener.class), this);
             Bukkit.getPluginManager().registerEvents(injector.getInstance(cz.neumimto.towny.townycivs.tutorial.TutorialListener.class), this);
+            Bukkit.getPluginManager().registerEvents(injector.getInstance(cz.neumimto.towny.townycivs.Listeners.PowerToolListener.class), this);
         }
 
         injector.getInstance(ItemService.class).registerRecipes();
@@ -144,6 +146,15 @@ public class TownyCivs extends JavaPlugin {
     public void onDisable() {
         getLogger().info("TownyCivs disabled");
         schedulerEnabled = false;
+
+        // Clean up all power line entities on shutdown
+        try {
+            cz.neumimto.towny.townycivs.power.PowerService powerService = injector.getInstance(cz.neumimto.towny.townycivs.power.PowerService.class);
+            powerService.cleanupAllPowerLines();
+            getLogger().info("Power line entities cleaned up");
+        } catch (Exception e) {
+            getLogger().warning("Failed to clean up power lines: " + e.getMessage());
+        }
     }
 
     public static void stopCurrentScheduler() {

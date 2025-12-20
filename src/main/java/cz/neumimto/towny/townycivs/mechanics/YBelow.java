@@ -2,7 +2,7 @@ package cz.neumimto.towny.townycivs.mechanics;
 
 import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
 
-class YBellow implements Mechanic<DoubleWrapper> {
+class YBelow implements Mechanic<DoubleWrapper> {
 
     @Override
     public boolean check(TownContext townContext, DoubleWrapper configContext) {

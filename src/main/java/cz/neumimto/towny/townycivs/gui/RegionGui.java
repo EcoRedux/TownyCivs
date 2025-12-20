@@ -22,6 +22,7 @@ import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -65,6 +66,13 @@ public class RegionGui extends TCGui {
     }
 
     /**
+     * Remove a player from region GUI tracking
+     */
+    public void removePlayerFromTracking(UUID playerId) {
+        openRegionGuis.remove(playerId);
+    }
+
+    /**
      * Start a task that refreshes open GUIs every second (20 ticks)
      */
     private void startRefreshTask() {
@@ -104,13 +112,40 @@ public class RegionGui extends TCGui {
      */
     private void updateGuiSilently(Player player, Region region) {
         try {
+            // Get the current inventory title as plain text
+            String currentTitle = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(player.getOpenInventory().title());
+
+            // Calculate expected title to verify player is still in the correct GUI
+            Town town = TownyAPI.getInstance().getResident(player).getTownOrNull();
+            if (town == null) {
+                openRegionGuis.remove(player.getUniqueId());
+                return;
+            }
+
+            Structure structureById = configurationService.findStructureById(region.structureId).orElse(null);
+            if (structureById == null) {
+                openRegionGuis.remove(player.getUniqueId());
+                return;
+            }
+
+            String rawTitle = town.getPrefix() + " " + town.getName() + " - " + structureById.name;
+            String expectedTitle = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(MiniMessage.miniMessage().deserialize(rawTitle));
+
+            if (!currentTitle.equals(expectedTitle)) {
+                // Title mismatch - player is not in the region GUI (could be sub-GUI, chest, etc.)
+                openRegionGuis.remove(player.getUniqueId());
+                return;
+            }
+
             // Recreate the GUI data
             Map<String, List<GuiCommand>> paneData = getPaneData(player, region.uuid.toString());
 
             // Update only the status item in the player's current view
             List<GuiCommand> statusCommands = paneData.get("Status");
             if (statusCommands != null && !statusCommands.isEmpty()) {
-                ItemStack statusItem = statusCommands.getFirst().getItem();
+                ItemStack statusItem = statusCommands.get(0).getItem();
                 // Update the status slot (slot 13 based on Region.conf)
                 player.getOpenInventory().getTopInventory().setItem(13, statusItem);
             }
@@ -135,6 +170,7 @@ public class RegionGui extends TCGui {
         openRegionGuis.put(player.getUniqueId(), region.uuid);
 
         ChestGui chestGui = loadGui(player, region.uuid.toString());
+        chestGui.setOnClose(event -> onGuiClose(player));
         chestGui.show(player);
     }
 
@@ -237,6 +273,8 @@ public class RegionGui extends TCGui {
         });
         map.put("RemainingBlocks", List.of(new GuiCommand(remBlocks, e -> {
             e.setCancelled(true);
+            // Stop tracking when opening sub-GUI
+            openRegionGuis.remove(((Player) e.getWhoClicked()).getUniqueId());
             ChestGui chestGui = remainingBlocksGui(region);
             chestGui.show(e.getWhoClicked());
         })));
@@ -303,15 +341,35 @@ public class RegionGui extends TCGui {
 
         map.put("Status", List.of(new GuiCommand(status, e -> {
             e.setCancelled(true);
-            if(e.isLeftClick()){
-                ChestGui chestGui = upkeepGui(region);
-                chestGui.show(e.getWhoClicked());
-            }else if(e.isRightClick()){
-                ChestGui chestGui = productionGui(region);
-                chestGui.show(e.getWhoClicked());
-            }
-
         })));
+
+
+
+        ItemStack production = new ItemStack(Material.CHEST);
+        production.editMeta(itemMeta -> {
+            itemMeta.displayName(mm.deserialize("<green>Structure Input/Output.</green>"));
+            var lore = new ArrayList<Component>();
+            lore.add(mm.deserialize("<gray>Left Click to check Input, Right Click to see Output.</gray>"));
+            itemMeta.lore(lore);
+        });
+
+        map.put("Production", List.of(new GuiCommand(production, e -> {
+            e.setCancelled(true);
+            Player clickPlayer = (Player) e.getWhoClicked();
+            if(e.isLeftClick()){
+                // Stop tracking when opening sub-GUI
+                openRegionGuis.remove(clickPlayer.getUniqueId());
+                ChestGui chestGui = upkeepGui(region);
+                chestGui.show(clickPlayer);
+            }else if(e.isRightClick()){
+                // Stop tracking when opening sub-GUI
+                openRegionGuis.remove(clickPlayer.getUniqueId());
+                ChestGui chestGui = productionGui(region);
+                chestGui.show(clickPlayer);
+            }
+        }
+
+        )));
 
         ItemStack upgrade = new ItemStack(Material.AIR);
 
@@ -395,9 +453,13 @@ public class RegionGui extends TCGui {
                 return;
             }
             if(e.isLeftClick()){
+                // Stop tracking when opening sub-GUI
+                openRegionGuis.remove(((Player) e.getWhoClicked()).getUniqueId());
                 ChestGui chestGui = upgradeRequirementsGui(region, townContext);
                 chestGui.show(e.getWhoClicked());
             } else if(e.isRightClick()){
+                // Stop tracking when opening sub-GUI
+                openRegionGuis.remove(((Player) e.getWhoClicked()).getUniqueId());
                 ChestGui chestGui = confirmUpgradeGui(region, townContext);
                 chestGui.show(e.getWhoClicked());
             }
@@ -418,6 +480,8 @@ public class RegionGui extends TCGui {
         backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
         staticPane.addItem(new GuiItem(backButton, e -> {
             e.setCancelled(true);
+            // Re-track when going back to main GUI
+            openRegionGuis.put(((Player) e.getWhoClicked()).getUniqueId(), region.uuid);
             display((Player) e.getWhoClicked(), region);
         }), 0, 3);
 
@@ -466,6 +530,8 @@ public class RegionGui extends TCGui {
         backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
         staticPane.addItem(new GuiItem(backButton, e -> {
             e.setCancelled(true);
+            // Re-track when going back to main GUI
+            openRegionGuis.put(((Player) e.getWhoClicked()).getUniqueId(), region.uuid);
             display((Player) e.getWhoClicked(), region);
         }), 0, 3);
 
@@ -517,6 +583,8 @@ public class RegionGui extends TCGui {
         backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
         staticPane.addItem(new GuiItem(backButton, e -> {
             e.setCancelled(true);
+            // Re-track when going back to main GUI
+            openRegionGuis.put(((Player) e.getWhoClicked()).getUniqueId(), region.uuid);
             display((Player) e.getWhoClicked(), region);
         }), 0, 3);
 
@@ -600,6 +668,8 @@ public class RegionGui extends TCGui {
         backButton.editMeta(meta -> meta.displayName(mm.deserialize("<green>← Back to Structure</green>")));
         staticPane.addItem(new GuiItem(backButton, e -> {
             e.setCancelled(true);
+            // Re-track when going back to main GUI
+            openRegionGuis.put(((Player) e.getWhoClicked()).getUniqueId(), region.uuid);
             display((Player) e.getWhoClicked(), region);
         }), 0, 3);
 
@@ -762,6 +832,8 @@ public class RegionGui extends TCGui {
         });
         staticPane.addItem(new GuiItem(cancelBtn, e -> {
             e.setCancelled(true);
+            // Re-track when going back to main GUI
+            openRegionGuis.put(((Player) e.getWhoClicked()).getUniqueId(), region.uuid);
             display((Player) e.getWhoClicked(), region);
         }), 2, 1);
 

@@ -272,7 +272,7 @@ public class TownListener implements Listener {
             }
 
             // just incase the above misses some blocks, do a radius update
-            int radius = 5;
+            int radius = 10;
 
             for (int x = -radius; x <= radius; x++) {
                 for (int y = -radius; y <= radius; y++) {

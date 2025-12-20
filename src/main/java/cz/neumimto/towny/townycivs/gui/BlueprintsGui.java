@@ -192,6 +192,10 @@ public class BlueprintsGui {
     }
 
     private void createAndShowGui(Player player, BlueprintGuiSession session) {
+        // Remove from region GUI tracking to prevent wool duplication
+        RegionGui regionGui = TownyCivs.injector.getInstance(RegionGui.class);
+        regionGui.removePlayerFromTracking(player.getUniqueId());
+
         var resident = TownyAPI.getInstance().getResident(player);
         if (resident == null) {
             player.sendMessage(Component.text("You are not registered as a resident!", NamedTextColor.RED));

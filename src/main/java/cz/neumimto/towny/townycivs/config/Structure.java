@@ -88,6 +88,9 @@ public class Structure {
     @Path("TownPointPrice")
     public int townPointPrice;
 
+    @Path("Tags")
+    public List<String> tags = new ArrayList<>();
+
     public static class Area {
         public final int x;
         public final int z;

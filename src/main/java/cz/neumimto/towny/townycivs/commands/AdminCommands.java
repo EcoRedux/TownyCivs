@@ -200,6 +200,39 @@ public class AdminCommands extends BaseCommand {
         }
     }
 
+    @Subcommand("give power-tool")
+    @CommandPermission("townycivs.admin.give")
+    @Description("Gives the Power tool to a player (or yourself if no player specified)")
+    @Syntax("[player]")
+    public void onGivePowerTool(CommandSender sender, @Optional String playerName) {
+        Player target;
+
+        if (playerName == null || playerName.isEmpty()) {
+            // Give to sender if they're a player
+            if (!(sender instanceof Player)) {
+                sender.sendMessage(ChatColor.RED + "This command can only be used by players when no target is specified.");
+                return;
+            }
+            target = (Player) sender;
+        } else {
+            // Give to specified player
+            target = Bukkit.getPlayer(playerName);
+            if (target == null) {
+                sender.sendMessage(ChatColor.RED + "Player '" + playerName + "' not found or not online.");
+                return;
+            }
+        }
+
+        target.getInventory().addItem(ItemService.getPowerTool());
+
+        if (target == sender) {
+            sender.sendMessage(ChatColor.GREEN + "You have received the Power tool!");
+        } else {
+            sender.sendMessage(ChatColor.GREEN + "Gave Power tool to " + target.getName());
+            target.sendMessage(ChatColor.GREEN + "You have received the Power tool!");
+        }
+    }
+
     // ==================== Tutorial Commands ====================
 
     @Inject

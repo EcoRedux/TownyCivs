@@ -31,6 +31,10 @@ public class PluginConfig {
     @Conversion(TownPointsConvertor.class)
     public Map<Integer, Integer> townpoints;
 
+    @Path("power_capacity")
+    @Conversion(PowerCapacityConverter.class)
+    public Map<Integer, Double> powerCapacity;
+
     @Path("storage")
     public String storage;
 

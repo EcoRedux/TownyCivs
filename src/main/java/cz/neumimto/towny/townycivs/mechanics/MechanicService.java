@@ -52,7 +52,7 @@ public class MechanicService {
 
         placeReq(new Permission());
         placeReq(new Biome());
-        placeReq(new YBellow());
+        placeReq(new YBelow());
         placeReq(new YAbove());
         placeReq(new WorldReq());
         placeReq(new TownRank());
@@ -71,6 +71,11 @@ public class MechanicService {
         prodMech(new MoneyProduction());
         prodMech(new Administration()); // Town Hall administration mechanic
         prodMech(new ConditionalItemProduction()); // Conditional crafting production
+        prodMech(new PowerGeneration()); // Power generation mechanic
+        prodMech(new PowerStorage()); // Power storage (batteries)
+
+        // Power consumption is an upkeep requirement
+        prodReq(new PowerConsumption());
 
         Bukkit.getPluginManager().callEvent(new RegisterMechanicEvent(this));
     }

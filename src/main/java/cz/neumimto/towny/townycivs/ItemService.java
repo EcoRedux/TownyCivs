@@ -54,6 +54,25 @@ public class ItemService {
         return itemStack;
     }
 
+    public static ItemStack getPowerTool() {
+        ItemStack itemStack = new ItemStack(Material.REDSTONE_TORCH);
+
+        Component name = Component.text("Power Line Tool")
+                .color(NamedTextColor.YELLOW)
+                .decorate(TextDecoration.BOLD);
+
+        itemStack.editMeta(meta -> {
+            meta.setCustomModelData(3079);
+            meta.displayName(name);
+            meta.setEnchantmentGlintOverride(true);
+            meta.lore(java.util.List.of(
+                Component.text("Right-click power towers to connect them", NamedTextColor.GRAY),
+                Component.text("Shift+Right-click to cancel connection", NamedTextColor.GRAY)
+            ));
+        });
+        return itemStack;
+    }
+
     public void registerRecipes() {
         NamespacedKey recipe = NamespacedKey.fromString("townycivs:town_book");
         if (Bukkit.getServer().getRecipe(recipe) != null) {
@@ -75,6 +94,17 @@ public class ItemService {
         editTool.addIngredient(Material.PAPER);
         editTool.addIngredient(Material.WOODEN_SHOVEL);
         Bukkit.getServer().addRecipe(editTool);
+
+        // Power Tool recipe
+        recipe = NamespacedKey.fromString("townycivs:power_tool");
+        if (Bukkit.getServer().getRecipe(recipe) != null) {
+            Bukkit.getServer().removeRecipe(recipe);
+        }
+        itemStack = getPowerTool();
+        ShapelessRecipe powerTool = new ShapelessRecipe(recipe, itemStack);
+        powerTool.addIngredient(Material.REDSTONE_TORCH);
+        powerTool.addIngredient(Material.COPPER_INGOT);
+        Bukkit.getServer().addRecipe(powerTool);
     }
 
     public StructureTool getItemType(ItemStack itemInUse) {
@@ -96,6 +126,15 @@ public class ItemService {
             if (itemMeta.hasCustomModelData()) {
                 if (itemMeta.getCustomModelData() == 3078) {
                     return StructureTool.EDIT_TOOL;
+                }
+            }
+        }
+
+        if (itemInUse.getType() == Material.REDSTONE_TORCH) {
+            ItemMeta itemMeta = itemInUse.getItemMeta();
+            if (itemMeta.hasCustomModelData()) {
+                if (itemMeta.getCustomModelData() == 3079) {
+                    return StructureTool.POWER_TOOL;
                 }
             }
         }
@@ -136,7 +175,7 @@ public class ItemService {
     }
 
     public enum StructureTool {
-        EDIT_TOOL, TOWN_TOOL
+        EDIT_TOOL, TOWN_TOOL, POWER_TOOL
     }
 
 }

@@ -19,4 +19,7 @@ public interface Mechanics {
     String UPGRADE = "upgrade";
     String ADMINISTRATION = "administration";
     String CONDITIONAL_ITEM_PRODUCTION = "conditional_item_production";
+    String POWER_GENERATION = "power_generation";
+    String POWER_CONSUMPTION = "power_consumption";
+    String POWER_STORAGE = "power_storage";
 }

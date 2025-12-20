@@ -9,7 +9,9 @@ import cz.neumimto.towny.townycivs.db.Flatfile;
 import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
+import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
+import cz.neumimto.towny.townycivs.power.PowerService;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
 import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
@@ -251,6 +253,60 @@ public class StructureService {
             return a;
         });
 
+        // Register with PowerService if structure has power-related mechanics
+        registerWithPowerService(loadedStructure);
+    }
+
+    /**
+     * Register structure with PowerService based on its mechanics
+     */
+    private void registerWithPowerService(LoadedStructure structure) {
+        PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
+
+        boolean isConnector = false;
+
+        // Check production for power generation and storage
+        if (structure.structureDef.production != null) {
+            for (var production : structure.structureDef.production) {
+                if (production.mechanic.id().equals("power_generation")) {
+                    DoubleWrapper config = (DoubleWrapper) production.configValue;
+                    powerService.registerPowerGenerator(structure, config.value);
+                    isConnector = true;
+                }
+
+                if (production.mechanic.id().equals("power_storage")) {
+                    DoubleWrapper config = (DoubleWrapper) production.configValue;
+                    powerService.registerPowerStorage(structure, config.value);
+                    isConnector = true;
+                }
+            }
+        }
+
+        // Check upkeep for power consumption
+        if (structure.structureDef.upkeep != null) {
+            for (var upkeep : structure.structureDef.upkeep) {
+                if (upkeep.mechanic.id().equals("power_consumption")) {
+                    DoubleWrapper config = (DoubleWrapper) upkeep.configValue;
+                    powerService.registerPowerConsumer(structure, config.value);
+                    isConnector = true;
+                }
+            }
+        }
+
+        // Check tags for explicit power connector
+        if (structure.structureDef.tags != null) {
+            for (String tag : structure.structureDef.tags) {
+                if (tag.equals("PowerConnector") || tag.equals("Power")) {
+                    powerService.registerPowerConnector(structure);
+                    isConnector = true;
+                }
+            }
+        }
+
+        // If structure has lightning rod but no power mechanics, register as connector
+        if (!isConnector && powerService.isPowerConnector(structure)) {
+            powerService.registerPowerConnector(structure);
+        }
     }
 
     public void loadAll() {
