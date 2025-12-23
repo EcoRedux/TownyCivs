@@ -1354,6 +1354,18 @@ public class PowerService {
     }
 
     public void loadTownPower(UUID townUuid) {
+        // Clear existing lines for this town before loading
+        List<PowerLine> toRemove = new ArrayList<>();
+        for (PowerLine line : powerLines.values()) {
+            Optional<LoadedStructure> s1 = structureService.findStructureByUUID(line.getStructure1());
+            if (s1.isPresent() && s1.get().town.equals(townUuid)) {
+                toRemove.add(line);
+            }
+        }
+        for (PowerLine line : toRemove) {
+            removePowerLine(line.getUuid());
+        }
+
         // Load from Flatfile
         List<Map<String, String>> data = flatfileStorage.loadPowerNetwork(townUuid);
 

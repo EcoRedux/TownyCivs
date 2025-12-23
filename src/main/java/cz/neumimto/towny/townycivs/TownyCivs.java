@@ -182,7 +182,7 @@ public class TownyCivs extends JavaPlugin {
             schedulerTask = MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
                     injector.getInstance(FoliaScheduler.class),
                     Duration.ZERO,
-                    Duration.ofMillis(250)
+                    Duration.of(1, ChronoUnit.SECONDS)
             );
             logger.info("Started new FoliaScheduler task");
         } catch (Exception e) {

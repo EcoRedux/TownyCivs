@@ -149,10 +149,12 @@ public class ConfigurationService {
             URI uri = getClass().getClassLoader().getResource(resourcePath).toURI();
             Path resourceDir;
             FileSystem fs = null;
+            boolean myFs = false;
 
             if (uri.getScheme().equals("jar")) {
                 try {
                     fs = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                    myFs = true;
                 } catch (FileSystemAlreadyExistsException e) {
                     fs = FileSystems.getFileSystem(uri);
                 }
@@ -183,23 +185,11 @@ public class ConfigurationService {
                     }
                 });
             } finally {
-                if (fs != null && fs.isOpen()) {
+                if (fs != null && fs.isOpen() && myFs) {
                     try {
-                        // Do not close the file system if it was already open, as other parts of the application might be using it.
-                        // However, newFileSystem creates a new one, so we should close it if we created it.
-                        // But since we are catching FileSystemAlreadyExistsException, we might be reusing an existing one.
-                        // The safest approach for jar file systems in plugins is often to leave them open or manage them carefully.
-                        // In this specific context, closing it might cause issues if other resources are loaded from the same jar later.
-                        // But typically, newFileSystem returns a new instance that should be closed.
-                        // If we reused an existing one via getFileSystem, we should probably NOT close it.
-                        // Let's just close it if we created it (which is tricky to track here without a flag).
-                        // Actually, for simplicity and safety against the specific error reported:
-                        // The error is FileSystemAlreadyExistsException at newFileSystem.
-                        // So we just need to handle that exception and reuse the existing FS.
-                        // We don't necessarily need to close it here if it's the main plugin jar FS.
                          fs.close();
                     } catch (UnsupportedOperationException e) {
-                        // Some file systems don't support close, or it's already closed.
+                        // Ignore
                     }
                 }
             }

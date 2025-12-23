@@ -336,6 +336,9 @@ public class StructureService {
 
         PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
 
+        // Clean up any orphaned entities from a previous server session before loading new ones.
+        powerService.cleanupAllPowerLines();
+
         // Iterate through all known towns and load their power grids
         for (com.palmergames.bukkit.towny.object.Town town : com.palmergames.bukkit.towny.TownyAPI.getInstance().getTowns()) {
             powerService.loadTownPower(town.getUUID());
