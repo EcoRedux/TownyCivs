@@ -14,19 +14,28 @@ public class Biome implements Mechanic<StringList> {
         org.bukkit.block.Biome computedBiome = townContext.structureCenterLocation.getBlock().getComputedBiome();
         String biomeKey = computedBiome.getKey().asString();
 
-
-        // Return FALSE if biome is in the banned list (structure cannot be placed here)
-        // Return TRUE if biome is NOT in the banned list (structure can be placed)
-        boolean result = !configContext.configItems.contains(biomeKey);
-        return result;
+        if (configContext.whitelist) {
+            // Whitelist mode: Return TRUE if biome IS in the list
+            return configContext.configItems.contains(biomeKey);
+        } else {
+            // Blacklist mode (default): Return TRUE if biome is NOT in the list
+            return !configContext.configItems.contains(biomeKey);
+        }
     }
 
     @Override
     public void nokmessage(TownContext townContext, StringList configuration) {
         if (townContext.player != null) {
             org.bukkit.block.Biome computedBiome = townContext.structureCenterLocation.getBlock().getComputedBiome();
-            townContext.player.sendMessage(MiniMessage.miniMessage().deserialize(
-                "<gold>[TownyCivs]</gold> <red>Cannot place " + townContext.structure.name + " in biome: " + computedBiome.getKey().asString() + "</red>"));
+            String biomeKey = computedBiome.getKey().asString();
+            
+            if (configuration.whitelist) {
+                 townContext.player.sendMessage(MiniMessage.miniMessage().deserialize(
+                    "<gold>[TownyCivs]</gold> <red>Cannot place " + townContext.structure.name + " in biome: " + biomeKey + ". Allowed biomes: " + String.join(", ", configuration.configItems) + "</red>"));
+            } else {
+                townContext.player.sendMessage(MiniMessage.miniMessage().deserialize(
+                    "<gold>[TownyCivs]</gold> <red>Cannot place " + townContext.structure.name + " in biome: " + biomeKey + "</red>"));
+            }
         }
     }
 
