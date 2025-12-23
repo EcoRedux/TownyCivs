@@ -20,6 +20,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.java.JavaPluginLoader;
 import org.bukkit.scheduler.BukkitTask;
 import space.arim.morepaperlib.MorePaperLib;
+import space.arim.morepaperlib.scheduling.ScheduledTask;
 
 import java.io.File;
 import java.io.IOException;
@@ -39,7 +40,7 @@ public class TownyCivs extends JavaPlugin {
 
     public static Injector injector;
     public static MorePaperLib MORE_PAPER_LIB;
-    private static Object schedulerTask;
+    private static ScheduledTask schedulerTask;
     public static volatile boolean schedulerEnabled = true;
     public boolean reloading;
     @Inject
@@ -131,11 +132,7 @@ public class TownyCivs extends JavaPlugin {
 
         injector.getInstance(ItemService.class).registerRecipes();
 
-        schedulerEnabled = true;
-        schedulerTask = MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
-                injector.getInstance(FoliaScheduler.class),
-                Duration.ZERO,
-                Duration.of(1, ChronoUnit.SECONDS));
+        startNewScheduler();
 
         reloading = true;
         getLogger().info("TownyCivs started");
@@ -145,7 +142,7 @@ public class TownyCivs extends JavaPlugin {
     @Override
     public void onDisable() {
         getLogger().info("TownyCivs disabled");
-        schedulerEnabled = false;
+        stopCurrentScheduler();
 
 
 
@@ -169,10 +166,17 @@ public class TownyCivs extends JavaPlugin {
 
     public static void stopCurrentScheduler() {
         schedulerEnabled = false;
+        if (schedulerTask != null) {
+            schedulerTask.cancel();
+            schedulerTask = null;
+        }
         logger.info("Stopped existing FoliaScheduler task");
     }
 
     public static void startNewScheduler() {
+        if (schedulerTask != null && !schedulerTask.isCancelled()) {
+            stopCurrentScheduler();
+        }
         try {
             schedulerEnabled = true;
             schedulerTask = MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
