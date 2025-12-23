@@ -3,6 +3,8 @@ package cz.neumimto.towny.townycivs.db;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public sealed interface IStorage permits Flatfile, Database {
@@ -14,4 +16,6 @@ public sealed interface IStorage permits Flatfile, Database {
 
     Collection<LoadedStructure> allStructures();
 
+    default void savePowerNetwork(UUID townId, List<Map<String, String>> lines) {}
+    default List<Map<String, String>> loadPowerNetwork(UUID townId) { return List.of(); }
 }

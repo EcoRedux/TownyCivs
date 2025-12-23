@@ -12,6 +12,7 @@ import cz.neumimto.towny.townycivs.commands.StructureCommands;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
 import cz.neumimto.towny.townycivs.Listeners.InventoryListener;
 import cz.neumimto.towny.townycivs.mechanics.MechanicService;
+import cz.neumimto.towny.townycivs.power.PowerService;
 import cz.neumimto.towny.townycivs.schedulers.FoliaScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -66,21 +67,14 @@ public class TownyCivs extends JavaPlugin {
         TownyCivs.logger = getLogger();
         INSTANCE = this;
         MORE_PAPER_LIB = new MorePaperLib(this);
-        getLogger().info("""
-                  
-                  ______                          ______      __            _         \s
-                 /_  __/___ _      ______  __  __/ ____/___  / /___  ____  (_)__  _____
-                  / / / __ \\ | /| / / __ \\/ / / / /   / __ \\/ / __ \\/ __ \\/ / _ \\/ ___/
-                 / / / /_/ / |/ |/ / / / / /_/ / /___/ /_/ / / /_/ / / / / /  __(__  )\s
-                /_/  \\____/|__/|__/_/ /_/\\__, /\\____/\\____/_/\\____/_/ /_/_/\\___/____/ \s
-                                        /____/                                        \s
-                """);
         getLogger().info("TownyCivs starting");
 
         if (!reloading) {
             injector = Guice.createInjector(new AbstractModule() {
                 @Override
                 protected void configure() {
+                    bind(cz.neumimto.towny.townycivs.db.Flatfile.class).in(javax.inject.Singleton.class);
+                    bind(cz.neumimto.towny.townycivs.db.IStorage.class).to(cz.neumimto.towny.townycivs.db.Flatfile.class);
                     bind(ConfigurationService.class);
                     bind(FoliaScheduler.class);
                     bind(StructureService.class);
@@ -104,23 +98,30 @@ public class TownyCivs extends JavaPlugin {
             logger.log(Level.SEVERE, "Unable to load configuration " + e.getMessage());
         }
 
+        // Initialize Storage BEFORE loading structures
+        injector.getInstance(cz.neumimto.towny.townycivs.db.Flatfile.class).init();
+
+        // Load Structures
         injector.getInstance(StructureService.class).loadAll();
+
         if (!reloading) {
             PaperCommandManager manager = new PaperCommandManager(this);
             manager.registerCommand(injector.getInstance(StructureCommands.class));
             manager.registerCommand(injector.getInstance(AdminCommands.class));
 
+            // --- RESTORED MISSING TRANSLATION CODE ---
             Map<String, Map<String, String>> translations = new HashMap<>();
             try (var is = getClass().getClassLoader().getResourceAsStream("lang/en-US.properties")) {
-                Properties properties = new Properties();
-                properties.load(is);
-
-                translations.put("en_US", new HashMap<>((Map) properties));
+                if (is != null) {
+                    Properties properties = new Properties();
+                    properties.load(is);
+                    translations.put("en_US", new HashMap<>((Map) properties));
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
             TownyAPI.getInstance().addTranslations(this, translations);
-
+            // -----------------------------------------
 
             Bukkit.getPluginManager().registerEvents(injector.getInstance(TownListener.class), this);
             Bukkit.getPluginManager().registerEvents(injector.getInstance(InventoryListener.class), this);
@@ -136,7 +137,6 @@ public class TownyCivs extends JavaPlugin {
                 Duration.ZERO,
                 Duration.of(1, ChronoUnit.SECONDS));
 
-
         reloading = true;
         getLogger().info("TownyCivs started");
     }
@@ -147,13 +147,23 @@ public class TownyCivs extends JavaPlugin {
         getLogger().info("TownyCivs disabled");
         schedulerEnabled = false;
 
+
+
         // Clean up all power line entities on shutdown
         try {
-            cz.neumimto.towny.townycivs.power.PowerService powerService = injector.getInstance(cz.neumimto.towny.townycivs.power.PowerService.class);
-            powerService.cleanupAllPowerLines();
+            PowerService powerService = injector.getInstance(PowerService.class);
+            if (powerService != null) {
+                // Save power data for every town
+                for (com.palmergames.bukkit.towny.object.Town town : com.palmergames.bukkit.towny.TownyAPI.getInstance().getTowns()) {
+                    powerService.saveTownPower(town.getUUID());
+                }
+
+                // Remove visual entities so they don't get stuck in the world while the plugin is off
+                powerService.cleanupAllPowerLines();
+            }
             getLogger().info("Power line entities cleaned up");
         } catch (Exception e) {
-            getLogger().warning("Failed to clean up power lines: " + e.getMessage());
+            getLogger().warning("Failed to clean up power lines and save the grid: " + e.getMessage());
         }
     }
 
@@ -168,7 +178,7 @@ public class TownyCivs extends JavaPlugin {
             schedulerTask = MORE_PAPER_LIB.scheduling().asyncScheduler().runAtFixedRate(
                     injector.getInstance(FoliaScheduler.class),
                     Duration.ZERO,
-                    Duration.of(1, ChronoUnit.SECONDS)
+                    Duration.ofMillis(250)
             );
             logger.info("Started new FoliaScheduler task");
         } catch (Exception e) {

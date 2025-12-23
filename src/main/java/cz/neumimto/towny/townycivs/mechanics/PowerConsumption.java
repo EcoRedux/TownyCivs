@@ -49,20 +49,7 @@ public class PowerConsumption implements Mechanic<DoubleWrapper> {
     public void postAction(TownContext townContext, DoubleWrapper configContext) {
         // Consume power from town grid
         PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
-        double powerToConsume = configContext.value;
-
-        // Try to get power from storage first (discharge batteries)
-        double stored = powerService.getStoredEnergy(townContext.loadedStructure.town);
-        if (stored > 0) {
-            double amountFromStorage = Math.min(powerToConsume, stored);
-            powerService.setStoredEnergy(townContext.loadedStructure.town, stored - amountFromStorage);
-            powerToConsume -= amountFromStorage;
-        }
-
-        // If still need more power, track it as consumption from current generation
-        if (powerToConsume > 0) {
-            powerService.consumePower(townContext.loadedStructure.town, powerToConsume);
-        }
+        powerService.consumePower(townContext.loadedStructure.town, configContext.value);
     }
 
     @Override
@@ -127,4 +114,3 @@ public class PowerConsumption implements Mechanic<DoubleWrapper> {
         return Collections.singletonList(powerItem);
     }
 }
-

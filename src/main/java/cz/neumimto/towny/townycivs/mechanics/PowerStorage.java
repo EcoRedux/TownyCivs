@@ -1,6 +1,8 @@
 package cz.neumimto.towny.townycivs.mechanics;
 
 import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
+import cz.neumimto.towny.townycivs.mechanics.common.PowerStorageConfig;
+import cz.neumimto.towny.townycivs.power.PowerGrid;
 import cz.neumimto.towny.townycivs.power.PowerService;
 import cz.neumimto.towny.townycivs.TownyCivs;
 import net.kyori.adventure.text.Component;
@@ -25,7 +27,7 @@ import java.util.List;
  *   }
  * ]
  */
-public class PowerStorage implements Mechanic<DoubleWrapper> {
+public class PowerStorage implements Mechanic<PowerStorageConfig> {
 
     @Override
     public String id() {
@@ -33,46 +35,63 @@ public class PowerStorage implements Mechanic<DoubleWrapper> {
     }
 
     @Override
-    public boolean check(TownContext townContext, DoubleWrapper configContext) {
-        // Power storage is always available
-        return true;
-    }
-
-    @Override
-    public void postAction(TownContext townContext, DoubleWrapper configContext) {
-        // Register this structure as a battery with the power grid
+    public boolean check(TownContext townContext, PowerStorageConfig configContext) {
         PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
-        powerService.registerPowerStorage(townContext.loadedStructure, configContext.value);
+        PowerGrid grid = powerService.getPowerGrid(townContext.loadedStructure.town);
+        return grid != null && !grid.getConnections(townContext.loadedStructure.uuid).isEmpty();
     }
 
     @Override
-    public DoubleWrapper getNew() {
-        return new DoubleWrapper();
+    public void postAction(TownContext townContext, PowerStorageConfig config) {
+        // Register structure with specific rates
+        // Default rates to 10% of capacity if not specified
+        double charge = (config.chargeRate < 0) ? config.capacity * 0.1 : config.chargeRate;
+        double discharge = (config.dischargeRate < 0) ? config.capacity * 0.1 : config.dischargeRate;
+
+        PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
+        powerService.registerPowerStorage(
+                townContext.loadedStructure,
+                config.capacity,
+                charge,
+                discharge
+        );
     }
 
     @Override
-    public List<ItemStack> getGuiItems(TownContext townContext, DoubleWrapper configContext) {
+    public PowerStorageConfig getNew() {
+        return new PowerStorageConfig();
+    }
+
+
+
+
+    @Override
+    public List<ItemStack> getGuiItems(TownContext townContext, PowerStorageConfig configContext) {
         MiniMessage mm = MiniMessage.miniMessage();
         PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
+        PowerGrid grid = powerService.getPowerGrid(townContext.loadedStructure.town);
 
         double currentStored = powerService.getStoredEnergy(townContext.loadedStructure.town);
         double maxCapacity = powerService.getTotalStorageCapacity(townContext.loadedStructure.town);
-        double percentFull = maxCapacity > 0 ? (currentStored / maxCapacity) * 100 : 0;
+        boolean isConnected = grid != null && !grid.getConnections(townContext.loadedStructure.uuid).isEmpty();
 
-        ItemStack batteryItem = new ItemStack(Material.REDSTONE_BLOCK);
+        ItemStack batteryItem = new ItemStack(isConnected ? Material.REDSTONE_BLOCK : Material.OBSIDIAN);
         batteryItem.editMeta(meta -> {
-            meta.displayName(mm.deserialize("<aqua>🔋 Power Storage</aqua>"));
+            meta.displayName(mm.deserialize(isConnected ? "<aqua>🔋 Power Storage</aqua>" : "<red>🔋 Power Storage (Disconnected)</red>"));
             List<Component> lore = new ArrayList<>();
-            lore.add(mm.deserialize("<yellow>Capacity: " + configContext.value + " power</yellow>"));
-            lore.add(mm.deserialize("<green>Town Storage: " + String.format("%.1f", currentStored) + " / " + String.format("%.0f", maxCapacity) + " power</green>"));
-            lore.add(mm.deserialize("<gray>(" + String.format("%.1f", percentFull) + "% full)</gray>"));
-            lore.add(Component.empty());
-            lore.add(mm.deserialize("<gray>Charges when generation > consumption</gray>"));
-            lore.add(mm.deserialize("<gray>Discharges when consumption > generation</gray>"));
+
+            // CHANGED: configContext.value -> configContext.capacity
+            lore.add(mm.deserialize("<yellow>Capacity: " + configContext.capacity + " power</yellow>"));
+
+            if (isConnected) {
+                double percent = maxCapacity > 0 ? (currentStored / maxCapacity) * 100 : 0;
+                lore.add(mm.deserialize("<green>Total Battery Storage: " + String.format("%.1f", currentStored) + "</green>"));
+                lore.add(mm.deserialize("<gray>(" + String.format("%.1f", percent) + "% full)</gray>"));
+            } else {
+                lore.add(mm.deserialize("<red>⚠ Offline</red>"));
+            }
             meta.lore(lore);
         });
-
         return Collections.singletonList(batteryItem);
     }
 }
-

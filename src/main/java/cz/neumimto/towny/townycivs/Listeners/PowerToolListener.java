@@ -11,6 +11,7 @@ import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.power.PowerService;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Location;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -121,7 +122,7 @@ public class PowerToolListener implements Listener {
         // Handle power line connection
         if (powerService.hasPendingConnection(player)) {
             // Complete the connection
-            PowerService.PowerLineResult result = powerService.completePowerLineConnection(player, structure);
+            PowerService.PowerLineResult result = powerService.completePowerLineConnection(player, structure, clickedLocation);
 
             switch (result) {
                 case SUCCESS:
@@ -133,6 +134,10 @@ public class PowerToolListener implements Listener {
                 case DIFFERENT_TOWNS:
                     player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Cannot connect structures from different towns.</red>"));
                     break;
+                case DISCONNECTED: // <--- Handle the new result
+                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <yellow>⚡ Power line disconnected.</yellow>"));
+                    player.playSound(player.getLocation(), Sound.ITEM_LEAD_BREAK, 1.0f, 1.0f);
+                    break;
                 case TOO_FAR:
                     player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Structures are too far apart. Maximum distance is 50 blocks.</red>"));
                     break;
@@ -143,10 +148,15 @@ public class PowerToolListener implements Listener {
                     player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>⚡ Connection failed! Generators and consumers can only connect to ONE structure.</red>"));
                     break;
                 case INCOMPATIBLE_STRUCTURES:
-                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>⚡ Incompatible connection! Generators and consumers must connect through a power tower.</red>"));
+                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>⚡ Incompatible connection! Generators and consumers must connect through a utility pole.</red>"));
                     break;
                 case NOT_A_CONNECTOR:
                     player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>This structure cannot be connected to power lines.</red>"));
+                    break;
+                case INSUFFICIENT_RESOURCES: // <--- Handle the new result
+                    // We can't calculate the exact missing amount here easily without recalculating distance,
+                    // so we give a generic helpful message.
+                    player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Not enough materials! You need <yellow>1 Copper Ingot</yellow> per block of distance.</red>"));
                     break;
                 default:
                     player.sendMessage(mm.deserialize("<gold>[TownyCivs]</gold> <red>Failed to connect power line.</red>"));
@@ -154,7 +164,7 @@ public class PowerToolListener implements Listener {
             }
         } else {
             // Start a new connection
-            powerService.startPowerLineConnection(player, structure);
+            powerService.startPowerLineConnection(player, structure, clickedLocation);
         }
     }
 

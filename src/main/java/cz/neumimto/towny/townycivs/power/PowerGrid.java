@@ -18,7 +18,7 @@ public class PowerGrid {
     private final UUID townUuid;
     private final Set<UUID> generators = new HashSet<>();      // Structures that generate power
     private final Set<UUID> consumers = new HashSet<>();       // Structures that consume power
-    private final Set<UUID> storage = new HashSet<>();         // Structures that store power (batteries)
+    private final Map<UUID, BatteryState> batteries = new HashMap<>(); // Structures that store power (batteries) -> capacity
     private final Set<UUID> connectors = new HashSet<>();      // Power line structures (towers)
     private final Map<UUID, Set<UUID>> connections = new HashMap<>(); // Power line connections between structures
 
@@ -26,6 +26,40 @@ public class PowerGrid {
     private double totalConsumption = 0;
     private double totalStorageCapacity = 0;
     private double currentStoredEnergy = 0;
+
+    // New fields to store the results of the last completed tick
+    private double lastTickGeneration = 0;
+    private double lastTickConsumption = 0;
+
+    public static class BatteryState {
+        public double currentCharge;
+        public final double maxCapacity;
+        public final double chargeRate;
+        public final double dischargeRate;
+
+        public BatteryState(double capacity, double chargeRate, double dischargeRate) {
+            this.maxCapacity = capacity;
+            this.chargeRate = chargeRate;
+            this.dischargeRate = dischargeRate;
+        }
+    }
+
+    public void addBattery(UUID structureUuid, double capacity, double chargeRate, double dischargeRate) {
+        // Preserve existing charge if re-registering
+        double currentCharge = 0;
+        if (batteries.containsKey(structureUuid)) {
+            currentCharge = batteries.get(structureUuid).currentCharge;
+        }
+
+        BatteryState state = new BatteryState(capacity, chargeRate, dischargeRate);
+        state.currentCharge = Math.min(currentCharge, capacity); // Clamp to new capacity
+        batteries.put(structureUuid, state);
+    }
+
+    public Map<UUID, BatteryState> getBatteries() {
+        return batteries;
+    }
+
 
     public PowerGrid(UUID townUuid) {
         this.townUuid = townUuid;
@@ -43,10 +77,6 @@ public class PowerGrid {
         consumers.add(structureUuid);
     }
 
-    public void addStorage(UUID structureUuid) {
-        storage.add(structureUuid);
-    }
-
     public void addConnector(UUID structureUuid) {
         connectors.add(structureUuid);
         connections.putIfAbsent(structureUuid, new HashSet<>());
@@ -55,7 +85,7 @@ public class PowerGrid {
     public void removeStructure(UUID structureUuid) {
         generators.remove(structureUuid);
         consumers.remove(structureUuid);
-        storage.remove(structureUuid);
+        batteries.remove(structureUuid);
         connectors.remove(structureUuid);
         connections.remove(structureUuid);
         // Remove from all connection sets
@@ -97,7 +127,8 @@ public class PowerGrid {
     }
 
     /**
-     * Get the maximum power generation capacity for this town based on its level
+     * Get the maximum power generation capacity for this town based on its level.
+     * This is the hard cap on generation, NOT including batteries.
      */
     public double getMaxPowerCapacity() {
         try {
@@ -111,6 +142,7 @@ public class PowerGrid {
         }
     }
 
+
     /**
      * Get power capacity limit from configuration
      */
@@ -121,13 +153,13 @@ public class PowerGrid {
                 return capacity;
             }
         } catch (Exception e) {
-            // Fall through to hardcoded fallback
+            TownyCivs.logger.severe(e.getMessage());
         }
 
         // Fallback values if config is missing or null
         return switch (townLevel) {
             case 0 -> 0.0;
-            case 1 -> 100.0;
+            case 1 -> 150.0;
             case 2 -> 250.0;
             case 3 -> 500.0;
             case 4 -> 1000.0;
@@ -169,6 +201,7 @@ public class PowerGrid {
         return availablePower >= totalConsumption;
     }
 
+
     /**
      * Get power deficit (negative) or surplus (positive)
      */
@@ -184,9 +217,10 @@ public class PowerGrid {
         return totalGeneration >= (capacity * 0.9); // 90% of capacity
     }
 
-    private double getMaxDischargeRate() {
-        // TODO: Calculate from storage structures
-        return 100.0;
+    public double getMaxDischargeRate() {
+        return batteries.values().stream()
+                .mapToDouble(b -> Math.min(b.currentCharge, b.dischargeRate))
+                .sum();
     }
 
     // Getters and setters
@@ -196,18 +230,30 @@ public class PowerGrid {
     public double getTotalConsumption() { return totalConsumption; }
     public void setTotalConsumption(double totalConsumption) { this.totalConsumption = totalConsumption; }
 
-    public double getTotalStorageCapacity() { return totalStorageCapacity; }
+    public double getTotalStorageCapacity() {
+        return batteries.values().stream().mapToDouble(b -> b.maxCapacity).sum();
+    }
     public void setTotalStorageCapacity(double totalStorageCapacity) { this.totalStorageCapacity = totalStorageCapacity; }
 
-    public double getCurrentStoredEnergy() { return currentStoredEnergy; }
+    public double getCurrentStoredEnergy() {
+        return batteries.values().stream().mapToDouble(b -> b.currentCharge).sum();
+    }
     public void setCurrentStoredEnergy(double currentStoredEnergy) {
         this.currentStoredEnergy = Math.max(0, Math.min(currentStoredEnergy, totalStorageCapacity));
     }
 
     public Set<UUID> getGenerators() { return Collections.unmodifiableSet(generators); }
     public Set<UUID> getConsumers() { return Collections.unmodifiableSet(consumers); }
-    public Set<UUID> getStorage() { return Collections.unmodifiableSet(storage); }
+    public Set<UUID> getStorage() {
+        return Collections.unmodifiableSet(batteries.keySet());
+    }
     public Set<UUID> getConnectors() { return Collections.unmodifiableSet(connectors); }
     public Map<UUID, Set<UUID>> getAllConnections() { return Collections.unmodifiableMap(connections); }
-}
 
+    // Getters and Setters for the new fields
+    public double getLastTickGeneration() { return lastTickGeneration; }
+    public void setLastTickGeneration(double lastTickGeneration) { this.lastTickGeneration = lastTickGeneration; }
+
+    public double getLastTickConsumption() { return lastTickConsumption; }
+    public void setLastTickConsumption(double lastTickConsumption) { this.lastTickConsumption = lastTickConsumption; }
+}

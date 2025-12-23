@@ -5,17 +5,16 @@ import cz.neumimto.towny.townycivs.StructureService;
 import cz.neumimto.towny.townycivs.SubclaimService;
 import cz.neumimto.towny.townycivs.TownyCivs;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
-import cz.neumimto.towny.townycivs.TownyCivs;
 import com.palmergames.bukkit.towny.TownyAPI;
-import com.palmergames.bukkit.towny.object.Town;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
+import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Vector;
+import org.jetbrains.annotations.NotNull;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -52,28 +51,24 @@ public class PowerService {
     private final Map<UUID, Double> currentTickGeneration = new ConcurrentHashMap<>();
     private final Map<UUID, Double> currentTickConsumption = new ConcurrentHashMap<>();
 
+    @Inject
+    private cz.neumimto.towny.townycivs.db.Flatfile flatfileStorage;
+
     /**
      * Add power generation from a structure (called during production tick)
      * Respects town power capacity limits
      */
     public void addPowerGeneration(LoadedStructure structure, double amount) {
         PowerGrid grid = getPowerGrid(structure.town);
-        double maxCapacity = grid.getMaxPowerCapacity();
+        double maxCapacity = grid.getMaxPowerCapacity(); // The hard cap from town level
 
-        // Get current generation this tick
-        double currentGeneration = currentTickGeneration.getOrDefault(structure.town, 0.0);
+        double currentTotalGeneration = currentTickGeneration.getOrDefault(structure.town, 0.0);
 
-        // Cap the additional power to not exceed town capacity
-        double cappedAmount = Math.min(amount, Math.max(0, maxCapacity - currentGeneration));
-
-        if (cappedAmount > 0) {
-            currentTickGeneration.merge(structure.town, cappedAmount, Double::sum);
-        }
-
-        // Log if power is being capped
-        if (cappedAmount < amount) {
-            plugin.getLogger().info("[PowerService] Power generation capped for town " + structure.town + 
-                ". Attempted: " + amount + ", Applied: " + cappedAmount + ", Capacity: " + maxCapacity);
+        // Only add power if the grid is not already at its generation cap
+        if (currentTotalGeneration < maxCapacity) {
+            double canAdd = maxCapacity - currentTotalGeneration;
+            double amountToAdd = Math.min(amount, canAdd);
+            currentTickGeneration.merge(structure.town, amountToAdd, Double::sum);
         }
     }
 
@@ -87,9 +82,9 @@ public class PowerService {
         // Debug logging
         if (availablePower < requiredAmount) {
             PowerGrid grid = getPowerGrid(townUuid);
-            plugin.getLogger().info("[PowerService] Insufficient power for town " + townUuid + 
-                ". Required: " + requiredAmount + ", Available: " + availablePower + 
-                ", Capacity: " + grid.getMaxPowerCapacity() + 
+            plugin.getLogger().info("[PowerService] Insufficient power for town " + townUuid +
+                ". Required: " + requiredAmount + ", Available: " + availablePower +
+                ", Capacity: " + grid.getMaxPowerCapacity() +
                 ", Current Generation: " + currentTickGeneration.getOrDefault(townUuid, 0.0) +
                 ", Stored: " + grid.getCurrentStoredEnergy());
         }
@@ -104,17 +99,13 @@ public class PowerService {
         PowerGrid grid = powerGrids.get(townUuid);
         if (grid == null) return 0;
 
-        // Use effective power generation (capped by town level) instead of raw generation
-        double effectiveGenerated = Math.min(
-            currentTickGeneration.getOrDefault(townUuid, 0.0),
-            grid.getMaxPowerCapacity()
-        );
+        double generatedThisTick = currentTickGeneration.getOrDefault(townUuid, 0.0);
+        double consumedThisTick = currentTickConsumption.getOrDefault(townUuid, 0.0);
 
-        double consumed = currentTickConsumption.getOrDefault(townUuid, 0.0);
-
-        // Available power is effective generation plus stored energy, minus what's already consumed this tick
-        return effectiveGenerated + grid.getCurrentStoredEnergy() - consumed;
+        // Available = Active Generation + Max Potential Discharge from Batteries - Consumption
+        return generatedThisTick + grid.getMaxDischargeRate() - consumedThisTick;
     }
+
 
     /**
      * Consume power from town grid
@@ -126,11 +117,22 @@ public class PowerService {
     /**
      * Register a structure as a power storage (battery)
      */
-    public void registerPowerStorage(LoadedStructure structure, double capacity) {
+    public void registerPowerStorage(LoadedStructure structure, double capacity, double chargeRate, double dischargeRate) {
         PowerGrid grid = getPowerGrid(structure.town);
-        grid.addStorage(structure.uuid);
-        double currentCapacity = grid.getTotalStorageCapacity();
-        grid.setTotalStorageCapacity(currentCapacity + capacity);
+
+        // Check if battery already exists to prevent overwriting charge with stale saved data
+        boolean alreadyExists = grid.getBatteries().containsKey(structure.uuid);
+
+        grid.addBattery(structure.uuid, capacity, chargeRate, dischargeRate);
+
+        // Restore charge if it was saved AND it's a new registration
+        if (!alreadyExists && structure.savedBatteryCharge > 0) {
+            PowerGrid.BatteryState state = grid.getBatteries().get(structure.uuid);
+            if (state != null) {
+                // Clamp charge to capacity (in case config changed)
+                state.currentCharge = Math.min(structure.savedBatteryCharge, capacity);
+            }
+        }
     }
 
     /**
@@ -164,39 +166,61 @@ public class PowerService {
      * Called at start of each production cycle - uses capacity-capped power
      */
     public void resetTickPower() {
-        for (UUID townUuid : new HashSet<>(currentTickGeneration.keySet())) {
+        for (UUID townUuid : powerGrids.keySet()) {
             PowerGrid grid = powerGrids.get(townUuid);
             if (grid == null) continue;
 
-            // Use capacity-capped generation instead of raw generation
-            double rawGenerated = currentTickGeneration.getOrDefault(townUuid, 0.0);
-            double effectiveGenerated = Math.min(rawGenerated, grid.getMaxPowerCapacity());
+            double generated = currentTickGeneration.getOrDefault(townUuid, 0.0);
             double consumed = currentTickConsumption.getOrDefault(townUuid, 0.0);
-            double balance = effectiveGenerated - consumed;
 
-            if (balance > 0) {
-                // Excess power - charge batteries
-                double newStored = grid.getCurrentStoredEnergy() + balance;
-                grid.setCurrentStoredEnergy(Math.min(newStored, grid.getTotalStorageCapacity()));
-            } else if (balance < 0) {
-                // Power deficit - discharge batteries
-                double deficit = Math.abs(balance);
-                double available = grid.getCurrentStoredEnergy();
-                double toDischarge = Math.min(deficit, available);
-                grid.setCurrentStoredEnergy(available - toDischarge);
-            }
+            grid.setLastTickGeneration(generated);
+            grid.setLastTickConsumption(consumed);
 
-            // Log power wasted due to capacity limits
-            if (rawGenerated > effectiveGenerated) {
-                double wasted = rawGenerated - effectiveGenerated;
-                plugin.getLogger().info("[PowerService] Town " + townUuid + " wasted " + wasted + 
-                    " power due to capacity limits (" + effectiveGenerated + "/" + grid.getMaxPowerCapacity() + ")");
+            double netPower = generated - consumed;
+
+            if (netPower > 0) {
+                // SURPLUS: Batteries act as CONSUMERS
+                // Distribute surplus to batteries based on their Charge Rate
+                double surplus = netPower;
+
+                for (PowerGrid.BatteryState battery : grid.getBatteries().values()) {
+                    if (surplus <= 0) break;
+
+                    // How much empty space is left?
+                    double space = battery.maxCapacity - battery.currentCharge;
+
+                    // We can input the minimum of: Available Surplus, Battery Max Charge Rate, Battery Empty Space
+                    double input = Math.min(surplus, Math.min(battery.chargeRate, space));
+
+                    if (input > 0) {
+                        battery.currentCharge += input;
+                        surplus -= input;
+                    }
+                }
+
+            } else if (netPower < 0) {
+                // DEFICIT: Batteries act as GENERATORS
+                // Draw from batteries based on their Discharge Rate
+                double deficit = Math.abs(netPower);
+
+                for (PowerGrid.BatteryState battery : grid.getBatteries().values()) {
+                    if (deficit <= 0) break;
+
+                    // We can output the minimum of: Needed Power, Battery Max Discharge Rate, Battery Current Charge
+                    double output = Math.min(deficit, Math.min(battery.dischargeRate, battery.currentCharge));
+
+                    if (output > 0) {
+                        battery.currentCharge -= output;
+                        deficit -= output;
+                    }
+                }
             }
         }
 
         currentTickGeneration.clear();
         currentTickConsumption.clear();
     }
+
 
     /**
      * Get or create a power grid for a town
@@ -216,22 +240,22 @@ public class PowerService {
         PowerStatus status = getPowerStatus(townUuid);
 
         String statusIcon = status.isOverCapacity ? "§c⚠" : "§a✓";
-        String efficiencyColor = status.effectiveGeneration >= status.generationCapacity * 0.9 ? "§c" : 
+        String efficiencyColor = status.effectiveGeneration >= status.generationCapacity * 0.9 ? "§c" :
                                 status.effectiveGeneration >= status.generationCapacity * 0.7 ? "§e" : "§a";
 
         StringBuilder info = new StringBuilder();
-        info.append(String.format("%s Power Generation: §e%.1f§7/§6%.1f", 
+        info.append(String.format("%s Power Generation: §e%.1f§7/§6%.1f",
             statusIcon, status.effectiveGeneration, status.generationCapacity));
 
         if (status.wastedPower > 0) {
             info.append(String.format(" §c(%.1f wasted)", status.wastedPower));
         }
 
-        info.append(String.format("\n§7Storage: §b%.1f§7/§6%.1f", 
+        info.append(String.format("\n§7Storage: §b%.1f§7/§6%.1f",
             status.storedEnergy, status.storageCapacity));
 
-        info.append(String.format("\n§7Current Usage: %s%.1f§7, Available: §a%.1f", 
-            status.consumption > status.effectiveGeneration ? "§c" : "§e", 
+        info.append(String.format("\n§7Current Usage: %s%.1f§7, Available: §a%.1f",
+            status.consumption > status.effectiveGeneration ? "§c" : "§e",
             status.consumption, status.availablePower));
 
         if (status.isOverCapacity) {
@@ -270,8 +294,8 @@ public class PowerService {
             try {
                 Town town = TownyAPI.getInstance().getTown(structure.town);
                 String townName = town != null ? town.getName() : "Unknown";
-                plugin.getLogger().warning("Town " + townName + " power generation (" + 
-                    (grid.getTotalGeneration() + generationRate) + ") exceeds capacity limit (" + 
+                plugin.getLogger().warning("Town " + townName + " power generation (" +
+                    (grid.getTotalGeneration() + generationRate) + ") exceeds capacity limit (" +
                     grid.getMaxPowerCapacity() + "). Generation will be capped.");
             } catch (Exception e) {
                 plugin.getLogger().warning("Power generation capacity exceeded for town " + structure.town);
@@ -308,11 +332,9 @@ public class PowerService {
      * Start a power line connection from a structure
      * Called when player right-clicks a power tower with the power tool
      */
-    public void startPowerLineConnection(Player player, LoadedStructure structure) {
+    public void startPowerLineConnection(Player player, LoadedStructure structure, Location clickedLocation) {
         MiniMessage mm = MiniMessage.miniMessage();
-
-        // Find the lightning rod block in the structure for the connection point
-        Location connectionPoint = findLightningRodLocation(structure);
+        Location connectionPoint = clickedLocation.clone().add(0.5, 0.5, 0.5);
         if (connectionPoint == null) {
             // Fallback to center if no lightning rod found
             connectionPoint = structure.center.clone();
@@ -335,7 +357,7 @@ public class PowerService {
      * Complete a power line connection to another structure
      * Called when player right-clicks a second power tower with the power tool
      */
-    public PowerLineResult completePowerLineConnection(Player player, LoadedStructure targetStructure) {
+    public PowerLineResult completePowerLineConnection(Player player, LoadedStructure targetStructure, Location clickedLocation) {
         PowerLineConnectionState state = playerConnectionStates.remove(player.getUniqueId());
 
         if (state == null) {
@@ -352,6 +374,22 @@ public class PowerService {
             return PowerLineResult.SAME_STRUCTURE;
         }
 
+
+        PowerGrid grid = getPowerGrid(targetStructure.town);
+        if (grid.getConnections(state.sourceStructureUuid).contains(targetStructure.uuid)) {
+            // Find the physical line object
+            PowerLine existingLine = findPowerLine(state.sourceStructureUuid, targetStructure.uuid);
+
+            if (existingLine != null) {
+                removePowerLine(existingLine.getUuid());
+                return PowerLineResult.DISCONNECTED; // Return new status
+            }
+
+            // Fallback if logic desyncs (shouldn't happen)
+            return PowerLineResult.ALREADY_CONNECTED;
+        }
+
+
         // Get source and target structure definitions first for validation
         Optional<LoadedStructure> sourceOpt = findStructureByUUID(state.sourceStructureUuid);
         if (sourceOpt.isEmpty()) {
@@ -360,10 +398,10 @@ public class PowerService {
         LoadedStructure sourceStructure = sourceOpt.get();
 
         // Re-validate that both structures still have lightning rods
-        if (findLightningRodLocation(sourceStructure) == null) {
+        if (!hasLightningRod(sourceStructure)) {
             return PowerLineResult.NOT_A_CONNECTOR;
         }
-        if (findLightningRodLocation(targetStructure) == null) {
+        if (!hasLightningRod(targetStructure)) {
             return PowerLineResult.NOT_A_CONNECTOR;
         }
 
@@ -373,7 +411,7 @@ public class PowerService {
         }
 
         // Check distance
-        Location targetPoint = findLightningRodLocation(targetStructure);
+        Location targetPoint = clickedLocation.clone().add(0.5, 0.5, 0.5);
         if (targetPoint == null) {
             targetPoint = targetStructure.center.clone();
         }
@@ -382,12 +420,6 @@ public class PowerService {
 
         if (distance > MAX_POWER_LINE_DISTANCE) {
             return PowerLineResult.TOO_FAR;
-        }
-
-        // Check if connection already exists
-        PowerGrid grid = getPowerGrid(targetStructure.town);
-        if (grid.getConnections(state.sourceStructureUuid).contains(targetStructure.uuid)) {
-            return PowerLineResult.ALREADY_CONNECTED;
         }
 
         // Check connection restrictions
@@ -410,13 +442,30 @@ public class PowerService {
 
         // Additional restriction: consumers and generators can't connect to each other directly
         // They must connect through a power tower
-        if (sourceRestriction == PowerConnectionRestriction.CONSUMER && targetRestriction == PowerConnectionRestriction.GENERATOR) {
-            return PowerLineResult.INCOMPATIBLE_STRUCTURES;
-        }
-        if (sourceRestriction == PowerConnectionRestriction.GENERATOR && targetRestriction == PowerConnectionRestriction.CONSUMER) {
+        boolean sourceIsTower = sourceRestriction == PowerConnectionRestriction.TOWER;
+        boolean targetIsTower = targetRestriction == PowerConnectionRestriction.TOWER;
+
+        if (!sourceIsTower && !targetIsTower) {
+            // This blocks:
+            // - Storage <-> Storage
+            // - Storage <-> Generator
+            // - Storage <-> Consumer
+            // - Generator <-> Consumer
             return PowerLineResult.INCOMPATIBLE_STRUCTURES;
         }
 
+        int cost = (int) Math.ceil(distance);
+
+        // Only charge survival/adventure players
+        if (player.getGameMode() != GameMode.CREATIVE) {
+            // Check if player has enough copper
+            if (!player.getInventory().contains(Material.COPPER_INGOT, cost)) {
+                return PowerLineResult.INSUFFICIENT_RESOURCES;
+            }
+
+            // Deduct items
+            player.getInventory().removeItem(new ItemStack(Material.COPPER_INGOT, cost));
+        }
         // Create the power line
         PowerLine powerLine = new PowerLine(
                 state.sourceStructureUuid,
@@ -451,13 +500,20 @@ public class PowerService {
             if (structure.structureDef.tags.contains("PowerConnector")) {
                 return PowerConnectionRestriction.TOWER;
             }
+            if (structure.structureDef.tags.contains("PowerStorage")) {
+                return PowerConnectionRestriction.STORAGE; // Add this
+            }
         }
 
         // Check if it's a generator
         if (structure.structureDef.production != null) {
             for (var production : structure.structureDef.production) {
-                if (production.mechanic.id().equals("power_generation")) {
+                String mechId = production.mechanic.id();
+                if (mechId.equals("power_generation")) {
                     return PowerConnectionRestriction.GENERATOR;
+                }
+                if (mechId.equals("power_storage")) {
+                    return PowerConnectionRestriction.STORAGE; // Add this
                 }
             }
         }
@@ -481,21 +537,22 @@ public class PowerService {
     enum PowerConnectionRestriction {
         TOWER,      // Can connect to multiple structures
         GENERATOR,  // Can only connect to 1 structure (tower or consumer)
-        CONSUMER    // Can only connect to 1 structure (tower or generator)
+        CONSUMER,  // Can only connect to 1 structure (tower or generator)
+        STORAGE // Can only connect to 1 structure (tower)
     }
 
     /**
      * Find the lightning rod block location in a structure
      * Searches in a 10x10x10 area around the center
      */
-    private Location findLightningRodLocation(LoadedStructure structure) {
+    private boolean hasLightningRod(LoadedStructure structure) {
         Location center = structure.center;
         // can i get some debug info here
         System.out.println("[PowerService] Searching for lightning rod in structure " + structure.uuid + " at " + center);
         World world = center.getWorld();
         if (world == null) {
             System.out.println("[PowerService] World is null for structure " + structure.uuid);
-            return null;
+            return false;
         }
 
         // Search for lightning rod in a 10x10x10 area (increased from 5x5x5)
@@ -506,12 +563,12 @@ public class PowerService {
                     if (checkLoc.getBlock().getType().name().contains("LIGHTNING_ROD")) {
                         // Return the center of the lightning rod block (accepts all variants)
                         System.out.println("[PowerService] Found lightning rod at " + checkLoc);
-                        return checkLoc.add(0.5, 0.5, 0.5);
+                        return true;
                     }
                 }
             }
         }
-        return null;
+        return false;
     }
 
     /**
@@ -576,14 +633,14 @@ public class PowerService {
             Location pointLocation = new Location(world, x, y, z);
 
             // Spawn small chain item display at this point
-            org.bukkit.entity.ItemDisplay chainDisplay = (org.bukkit.entity.ItemDisplay) world.spawnEntity(
+            BlockDisplay chainDisplay = (BlockDisplay) world.spawnEntity(
                 pointLocation,
-                EntityType.ITEM_DISPLAY
+                EntityType.BLOCK_DISPLAY
             );
 
             // Set chain item
-            ItemStack chainItem = new ItemStack(Material.GRAY_WOOL);
-            chainDisplay.setItemStack(chainItem);
+
+            chainDisplay.setBlock(Material.GRAY_WOOL.createBlockData());
 
             // Configure display properties
             chainDisplay.setGravity(false);
@@ -603,6 +660,7 @@ public class PowerService {
             chainDisplay.setInterpolationDuration(0);
 
             chainEntities.add(chainDisplay);
+            powerLine.addEntityUuid(chainDisplay.getUniqueId());
         }
 
         // Store first and last entity UUIDs
@@ -619,46 +677,25 @@ public class PowerService {
         PowerLine powerLine = powerLines.remove(powerLineUuid);
         if (powerLine == null) return;
 
+        // 1. Remove Visual Entities
         World world = powerLine.getPoint1().getWorld();
         if (world != null) {
-            // Remove all armor stands along the power line
-            // Get all entities between the two points and remove tagged ones
-            Location point1 = powerLine.getPoint1();
-            Location point2 = powerLine.getPoint2();
-
-            // Expand the bounding box slightly to catch all entities
-            double minX = Math.min(point1.getX(), point2.getX()) - 5;
-            double maxX = Math.max(point1.getX(), point2.getX()) + 5;
-            double minY = Math.min(point1.getY(), point2.getY()) - 5;
-            double maxY = Math.max(point1.getY(), point2.getY()) + 5;
-            double minZ = Math.min(point1.getZ(), point2.getZ()) - 5;
-            double maxZ = Math.max(point1.getZ(), point2.getZ()) + 5;
-
-            // Remove all townycivs_powerline entities in the area
-            for (Entity entity : world.getEntities()) {
-                if (entity.getScoreboardTags().contains("townycivs_powerline")) {
-                    Location loc = entity.getLocation();
-                    if (loc.getX() >= minX && loc.getX() <= maxX &&
-                        loc.getY() >= minY && loc.getY() <= maxY &&
-                        loc.getZ() >= minZ && loc.getZ() <= maxZ) {
-                        entity.remove();
-                    }
+            for (UUID entityId : powerLine.getEntityUuids()) {
+                Entity entity = world.getEntity(entityId);
+                if (entity != null) {
+                    entity.remove();
                 }
             }
         }
 
-        // Update grid connections
-        PowerGrid grid = null;
-        for (PowerGrid g : powerGrids.values()) {
-            if (g.getConnectors().contains(powerLine.getStructure1())) {
-                grid = g;
-                break;
-            }
-        }
-        if (grid != null) {
+        // 2. Update Logical Grid Connections
+        Optional<LoadedStructure> structOpt = findStructureByUUID(powerLine.getStructure1());
+        if (structOpt.isPresent()) {
+            PowerGrid grid = getPowerGrid(structOpt.get().town);
             grid.disconnect(powerLine.getStructure1(), powerLine.getStructure2());
         }
     }
+
 
     /**
      * Restore power line visuals after server restart
@@ -829,53 +866,33 @@ public class PowerService {
 
         // Prevent circular recursion
         if (visited.contains(structureUuid)) {
-            System.out.println("[PowerService] Circular reference detected for structure " + structureUuid);
             return false;
         }
         visited.add(structureUuid);
 
-        // Debug: Show what's registered in the grid
-        System.out.println("[PowerService] Checking structure " + structureUuid + " for town " + townUuid);
-        System.out.println("[PowerService] Grid generators: " + grid.getGenerators());
-        System.out.println("[PowerService] Grid consumers: " + grid.getConsumers());
-        System.out.println("[PowerService] Grid connectors: " + grid.getConnectors());
-        System.out.println("[PowerService] Grid storage: " + grid.getStorage());
+        // A structure is connected if it IS a generator or powered storage
+        if (grid.getGenerators().contains(structureUuid)) {
+            return true;
+        }
+        if (grid.getStorage().contains(structureUuid) && grid.getCurrentStoredEnergy() > 0) {
+            return true;
+        }
 
-        // Get all structures this consumer is connected to
+        // Or if it's connected TO a structure that is connected
         Set<UUID> connections = grid.getConnections(structureUuid);
-        System.out.println("[PowerService] Structure " + structureUuid + " connections: " + connections);
         if (connections.isEmpty()) {
-            System.out.println("[PowerService] No connections found for structure " + structureUuid);
             return false;
         }
 
-        // Check if any connected structure is a generator or storage
         for (UUID connectedUuid : connections) {
-            System.out.println("[PowerService] Checking connected structure: " + connectedUuid);
-
-            // Check if it's a generator
-            if (grid.getGenerators().contains(connectedUuid)) {
-                System.out.println("[PowerService] Found connected generator: " + connectedUuid);
-                return true;
-            }
-            // Check if it's storage with power
-            if (grid.getStorage().contains(connectedUuid)) {
-                double stored = grid.getCurrentStoredEnergy();
-                System.out.println("[PowerService] Found connected storage: " + connectedUuid + " with " + stored + " power");
-                if (stored > 0) {
-                    return true;
-                }
-            }
-            // Recursively check if connected structure is connected to a generator/storage
             if (isStructureConnectedToPowerGrid(connectedUuid, townUuid, visited)) {
-                System.out.println("[PowerService] Found connection to power source through: " + connectedUuid);
                 return true;
             }
         }
 
-        System.out.println("[PowerService] No power source found for structure " + structureUuid);
         return false;
     }
+
 
     /**
      * Get all power lines for a town
@@ -899,7 +916,7 @@ public class PowerService {
      */
     public boolean isPowerConnector(LoadedStructure structure) {
         // Check if structure has a lightning rod (required for power connections)
-        if (findLightningRodLocation(structure) == null) {
+        if (!hasLightningRod(structure)) {
             return false;
         }
 
@@ -952,7 +969,7 @@ public class PowerService {
         LoadedStructure structure2 = structure2Opt.get();
 
         // Check if both structures still have lightning rods
-        if (findLightningRodLocation(structure1) == null || findLightningRodLocation(structure2) == null) {
+        if (!hasLightningRod(structure1) || !hasLightningRod(structure2)) {
             return false;
         }
 
@@ -1012,7 +1029,7 @@ public class PowerService {
 
     /**
      * Schedule periodic powerline validation
-     * Call this during plugin startup to run validation every few minutes
+     * Call this during plugin startup to run validation every 5 minutes
      */
     public void startPeriodicValidation() {
         // Run validation every 5 minutes (6000 ticks)
@@ -1045,6 +1062,7 @@ public class PowerService {
      */
     public enum PowerLineResult {
         SUCCESS,
+        DISCONNECTED,
         NO_START_POINT,
         DIFFERENT_TOWNS,
         SAME_STRUCTURE,
@@ -1052,7 +1070,8 @@ public class PowerService {
         ALREADY_CONNECTED,
         NOT_A_CONNECTOR,
         ALREADY_HAS_CONNECTION,
-        INCOMPATIBLE_STRUCTURES
+        INCOMPATIBLE_STRUCTURES,
+        INSUFFICIENT_RESOURCES
     }
 
     /**
@@ -1067,7 +1086,7 @@ public class PowerService {
         double capacity = grid.getMaxPowerCapacity();
         double storageCapacity = grid.getTotalStorageCapacity();
 
-        return new PowerStatus(townUuid, rawGeneration, effectiveGeneration, consumption, 
+        return new PowerStatus(townUuid, rawGeneration, effectiveGeneration, consumption,
                               stored, capacity, storageCapacity);
     }
 
@@ -1095,18 +1114,16 @@ public class PowerService {
         return effectiveGeneration / capacity;
     }
 
-    /**
-     * Initialize the power service
-     * Call this during plugin startup
-     */
-    public void initialize() {
-        // Clean up any orphaned entities from previous runs
-        performFullCleanup();
-
-        // Start periodic validation
-        startPeriodicValidation();
-
-        plugin.getLogger().info("[PowerService] Power service initialized with automatic cleanup and validation");
+    public PowerLine findPowerLine(UUID structure1Uuid, UUID structure2Uuid) {
+        // Iterate through all active power lines to find the matching pair
+        for (PowerLine line : powerLines.values()) {
+            // Check if this line connects both of our target structures
+       // We use 'connectsStructure' which you already have in PowerLine.java [cite: 2078]
+            if (line.connectsStructure(structure1Uuid) && line.connectsStructure(structure2Uuid)) {
+                return line;
+            }
+        }
+        return null; // No connection exists between these two
     }
 
     /**
@@ -1124,8 +1141,8 @@ public class PowerService {
         public final double availablePower;
         public final boolean isOverCapacity;
 
-        public PowerStatus(UUID townUuid, double rawGeneration, double effectiveGeneration, 
-                          double consumption, double storedEnergy, double generationCapacity, 
+        public PowerStatus(UUID townUuid, double rawGeneration, double effectiveGeneration,
+                          double consumption, double storedEnergy, double generationCapacity,
                           double storageCapacity) {
             this.townUuid = townUuid;
             this.rawGeneration = rawGeneration;
@@ -1141,9 +1158,224 @@ public class PowerService {
 
         @Override
         public String toString() {
-            return String.format("Power[%s]: Gen %.1f/%.1f (%.1f wasted), Consumption %.1f, Stored %.1f/%.1f, Available %.1f", 
-                townUuid, effectiveGeneration, generationCapacity, wastedPower, 
+            return String.format("Power[%s]: Gen %.1f/%.1f (%.1f wasted), Consumption %.1f, Stored %.1f/%.1f, Available %.1f",
+                townUuid, effectiveGeneration, generationCapacity, wastedPower,
                 consumption, storedEnergy, storageCapacity, availablePower);
+        }
+    }
+
+    /**
+     * Ticks visual effects for all power lines.
+     * Called by FoliaScheduler.
+     */
+    public void tickVisuals() {
+        for (PowerLine line : powerLines.values()) {
+            animatePowerLine(line);
+        }
+    }
+
+    private void animatePowerLine(PowerLine line) {
+        // 1. Get the Grid to check power status
+        Optional<LoadedStructure> struct1Opt = findStructureByUUID(line.getStructure1());
+        if (struct1Opt.isEmpty()) return;
+
+        LoadedStructure struct1 = struct1Opt.get();
+        // We still get the grid for other checks, but we won't call getAvailablePower on it
+        PowerGrid grid = getPowerGrid(struct1.town);
+        if (grid == null) return;
+
+        // 2. Resolve endpoints
+        Optional<LoadedStructure> struct2Opt = findStructureByUUID(line.getStructure2());
+        if (struct2Opt.isEmpty()) return;
+        LoadedStructure struct2 = struct2Opt.get();
+
+        PowerConnectionRestriction type1 = getConnectionRestriction(struct1);
+        PowerConnectionRestriction type2 = getConnectionRestriction(struct2);
+
+        Location start = null;
+        Location end = null;
+        boolean shouldRender = false;
+
+        // LOGIC: Determine direction and if it should glow
+
+        // Case A: Generator -> Network (Always glows if connected)
+        if (type1 == PowerConnectionRestriction.GENERATOR) {
+            start = line.getPoint1();
+            end = line.getPoint2();
+            shouldRender = true;
+        }
+        else if (type2 == PowerConnectionRestriction.GENERATOR) {
+            start = line.getPoint2();
+            end = line.getPoint1();
+            shouldRender = true;
+        }
+        // Case B: Network -> Consumer (Glows ONLY if grid has power)
+        else if (type1 == PowerConnectionRestriction.CONSUMER) {
+            start = line.getPoint2(); // From Pole
+            end = line.getPoint1();   // To Consumer
+            // FIX: Call 'this.getAvailablePower', NOT 'grid.getAvailablePower'
+            shouldRender = this.getAvailablePower(struct1.town) > 0;
+        }
+        else if (type2 == PowerConnectionRestriction.CONSUMER) {
+            start = line.getPoint1(); // From Pole
+            end = line.getPoint2();   // To Consumer
+            // FIX: Call 'this.getAvailablePower', NOT 'grid.getAvailablePower'
+            shouldRender = this.getAvailablePower(struct1.town) > 0;
+        }
+        // Case C: Pole <-> Pole (Optional: Static sparkles to show grid is live)
+        else if (type1 == PowerConnectionRestriction.TOWER && type2 == PowerConnectionRestriction.TOWER) {
+            // FIX: Call 'this.getAvailablePower'
+            if (this.getAvailablePower(struct1.town) > 0 && Math.random() > 0.7) {
+                spawnStaticSparkle(line);
+            }
+            return; // Done for poles
+        }
+
+        // 3. Render the particle flow
+        if (shouldRender && start != null && end != null) {
+            spawnFlowingParticles(start, end);
+        }
+    }
+    private void spawnFlowingParticles(Location from, Location to) {
+        World world = from.getWorld();
+        if (world == null) return;
+
+        double distance = from.distance(to);
+
+        // Calculate sagging parameters (must match createLeashConnection)
+        double sagAmount = Math.min(distance * 0.15, 3.0);
+
+        // Animate based on system time
+        double speed = 5.0; // Speed of the spark
+        double timeOffset = (System.currentTimeMillis() / 1000.0) * speed;
+
+        // We can spawn multiple particles per tick for a "stream" effect
+        // Or just one moving particle. Let's do one moving particle for clarity.
+        double positionRatio = (timeOffset % distance) / distance; // 0.0 to 1.0
+
+        // Linear interpolation for X and Z
+        double x = from.getX() + (to.getX() - from.getX()) * positionRatio;
+        double z = from.getZ() + (to.getZ() - from.getZ()) * positionRatio;
+
+        // Linear interpolation for Y baseline
+        double yBase = from.getY() + (to.getY() - from.getY()) * positionRatio;
+
+        // Apply Parabolic Sagging (Catenary approximation)
+        // Formula: 4 * r * (1 - r) creates a hump at 0.5
+        double sagFactor = 4 * positionRatio * (1 - positionRatio);
+        double y = yBase - (sagAmount * sagFactor);
+
+        Location particleLoc = new Location(world, x, y, z);
+
+        // Spawn Yellow "Electric" Spark
+        Particle.DustOptions dust = new Particle.DustOptions(Color.YELLOW, 1.0f);
+        // Use REDSTONE particle with color data
+        world.spawnParticle(Particle.DUST, particleLoc, 1, 0, 0, 0, 0, dust);
+    }
+
+    private void spawnStaticSparkle(PowerLine line) {
+        // Random point on the wire
+        double t = Math.random();
+        Location p1 = line.getPoint1();
+        Location p2 = line.getPoint2();
+
+        double x = p1.getX() + (p2.getX() - p1.getX()) * t;
+        double y = p1.getY() + (p2.getY() - p1.getY()) * t;
+        double z = p1.getZ() + (p2.getZ() - p1.getZ()) * t;
+
+        if (p1.getWorld() != null) {
+            p1.getWorld().spawnParticle(Particle.WAX_ON, x, y, z, 1, 0, 0, 0, 0);
+        }
+    }
+
+    private String serializeLoc(Location loc) {
+        if (loc == null || loc.getWorld() == null) return "null";
+        return loc.getWorld().getName() + ";" + loc.getX() + ";" + loc.getY() + ";" + loc.getZ();
+    }
+
+    private Location deserializeLoc(String s) {
+        if (s == null || s.equals("null")) return null;
+        try {
+            String[] parts = s.split(";");
+            if (parts.length < 4) return null;
+
+            World world = Bukkit.getWorld(parts[0]);
+            if (world == null) return null; // World might be unloaded or deleted
+
+            double x = Double.parseDouble(parts[1]);
+            double y = Double.parseDouble(parts[2]);
+            double z = Double.parseDouble(parts[3]);
+
+            return new Location(world, x, y, z);
+        } catch (Exception e) {
+            TownyCivs.logger.warning("Failed to deserialize location: " + s);
+            return null;
+        }
+    }
+
+    public void saveTownPower(UUID townUuid) {
+        // FIX: Use .get() directly. Do NOT use getPowerGrid() here.
+        // getPowerGrid() creates a new grid if one doesn't exist, which we don't want during saving.
+        PowerGrid grid = powerGrids.get(townUuid);
+
+        // 1. If no grid exists in memory, stop.
+        if (grid == null) return;
+
+        // 2. If grid is empty (no lines, no batteries), stop.
+        // This prevents saving empty "skeleton" files for towns that just placed a pole and broke it.
+        List<PowerLine> lines = getPowerLinesForTown(townUuid);
+        if (grid.getBatteries().isEmpty() && lines.isEmpty()) {
+            return;
+        }
+
+        // --- EXISTING SAVE LOGIC ---
+
+        // 1. Save Batteries
+        for (Map.Entry<UUID, PowerGrid.BatteryState> entry : grid.getBatteries().entrySet()) {
+            structureService.findStructureByUUID(entry.getKey()).ifPresent(struct -> {
+                struct.savedBatteryCharge = entry.getValue().currentCharge;
+                cz.neumimto.towny.townycivs.db.Storage.saveAll(java.util.Collections.singleton(struct));
+            });
+        }
+
+        // 2. Save Power Lines
+        List<Map<String, String>> serializedLines = new ArrayList<>();
+        for (PowerLine line : lines) {
+            Map<String, String> map = new HashMap<>();
+            map.put("uuid", line.getUuid().toString());
+            map.put("s1", line.getStructure1().toString());
+            map.put("s2", line.getStructure2().toString());
+            map.put("p1", serializeLoc(line.getPoint1()));
+            map.put("p2", serializeLoc(line.getPoint2()));
+            serializedLines.add(map);
+        }
+
+        flatfileStorage.savePowerNetwork(townUuid, serializedLines);
+    }
+
+    public void loadTownPower(UUID townUuid) {
+        // Load from Flatfile
+        List<Map<String, String>> data = flatfileStorage.loadPowerNetwork(townUuid);
+
+        for (Map<String, String> entry : data) {
+            try {
+                UUID s1 = UUID.fromString(entry.get("s1"));
+                UUID s2 = UUID.fromString(entry.get("s2"));
+                Location p1 = deserializeLoc(entry.get("p1")); // Use helper method
+                Location p2 = deserializeLoc(entry.get("p2")); // Use helper method
+
+                PowerLine line = new PowerLine(s1, s2, p1, p2);
+
+                // Restore Logic
+                powerLines.put(line.getUuid(), line);
+                PowerGrid grid = getPowerGrid(townUuid); // Get grid safely
+                grid.connect(s1, s2);
+
+                // Restore Visuals
+                createLeashConnection(line);
+            } catch (Exception e) {
+                TownyCivs.logger.warning("Error loading power line for town " + townUuid);
+            }
         }
     }
 }

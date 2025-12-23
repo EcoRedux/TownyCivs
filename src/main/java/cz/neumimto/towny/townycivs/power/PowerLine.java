@@ -3,6 +3,8 @@ package cz.neumimto.towny.townycivs.power;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -20,6 +22,8 @@ public class PowerLine {
     // The invisible entities that hold the leash
     private UUID entity1Uuid;
     private UUID entity2Uuid;
+    // identifier for each power line entity that takes in two structures and their two points
+    private final List<UUID> entityUuids = new ArrayList<>();
 
     private boolean active = true;
 
@@ -73,6 +77,14 @@ public class PowerLine {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public void addEntityUuid(UUID uuid) {
+        this.entityUuids.add(uuid);
+    }
+
+    public List<UUID> getEntityUuids() {
+        return entityUuids;
     }
 
     /**

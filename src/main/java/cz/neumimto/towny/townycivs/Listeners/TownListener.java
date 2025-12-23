@@ -7,6 +7,7 @@ import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.event.*;
 import com.palmergames.bukkit.towny.event.time.dailytaxes.PreTownPaysNationTaxEvent;
 import com.palmergames.bukkit.towny.event.town.TownLevelIncreaseEvent;
+import com.palmergames.bukkit.towny.event.town.TownPreInvitePlayerEvent;
 import com.palmergames.bukkit.towny.listeners.TownyPaperEvents;
 import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.Town;
@@ -443,16 +444,18 @@ public class TownListener implements Listener {
      * Block adding residents if town has reached the resident limit for their current hall tier
      * OR if their Town Hall administration is not active (upkeep not satisfied)
      */
+
     @EventHandler(priority = EventPriority.HIGH)
-    public void onTownInviteResident(TownInvitePlayerEvent event) {
-        Town town = event.getInvite().getSender();
+    public void onTownInviteResident(TownPreInvitePlayerEvent event) {
+        Town town = event.getTown();
         if (town == null) {
             return;
         }
 
+
         // Check if Town Hall administration is active (upkeep satisfied)
         if (!administrationService.hasActiveAdministration(town)) {
-            event.getInvite().decline(true);
+            event.setCancelled(true);
             TownyMessaging.sendPrefixedTownMessage(town,
                 "§c[TownyCivs] Your Town Hall is inactive! Supply it with the required upkeep items.");
             TownyMessaging.sendPrefixedTownMessage(town,
@@ -465,7 +468,7 @@ public class TownListener implements Listener {
         int maxResidents = getMaxResidentsForTownHall(town);
 
         if (currentResidents >= maxResidents) {
-            event.getInvite().decline(true);
+            event.setCancelled(true);
             // Send message to town
             TownyMessaging.sendPrefixedTownMessage(town,
                 "§c[TownyCivs] Town has reached its resident limit! (" + currentResidents + "/" + maxResidents + ")");
@@ -473,6 +476,43 @@ public class TownListener implements Listener {
                 "§7Upgrade your Town Hall to invite more residents.");
         }
     }
+
+    /**
+     *
+     * Incase the invite goes through, we deny the player being added
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onTownAddResident(TownPreAddResidentEvent event) {
+        Town town = event.getTown();
+        if (town == null) {
+            return;
+        }
+
+
+        // Check if Town Hall administration is active (upkeep satisfied)
+        if (!administrationService.hasActiveAdministration(town)) {
+            event.setCancelled(true);
+            TownyMessaging.sendPrefixedTownMessage(town,
+                    "§c[TownyCivs] Cannot add Resident to your Town! Your Town Hall is inactive! Supply it with the required upkeep items.");
+            TownyMessaging.sendPrefixedTownMessage(town,
+                    "§7Check your Town Hall inventory and ensure upkeep requirements are met.");
+            return;
+        }
+
+        // Check current size (before adding the new resident)
+        int currentResidents = town.getResidents().size();
+        int maxResidents = getMaxResidentsForTownHall(town);
+
+        if (currentResidents >= maxResidents) {
+            event.setCancelled(true);
+            // Send message to town
+            TownyMessaging.sendPrefixedTownMessage(town,
+                    "§c[TownyCivs] Cannot add Resident to your Town! Town has reached its resident limit! (" + currentResidents + "/" + maxResidents + ")");
+            TownyMessaging.sendPrefixedTownMessage(town,
+                    "§7Upgrade your Town Hall to add more residents.");
+        }
+    }
+
 
     /**
      * Block claims if town has reached the claim limit for their current hall tier

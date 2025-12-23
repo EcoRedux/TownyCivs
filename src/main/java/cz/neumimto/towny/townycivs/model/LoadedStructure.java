@@ -23,6 +23,7 @@ public class LoadedStructure {
     public final Location center;
 
     public final transient Structure structureDef;
+    public double savedBatteryCharge = 0.0;
 
     public final AtomicBoolean editMode;
     public final Map<Location, Inventory> inventory;

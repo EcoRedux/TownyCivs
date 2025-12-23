@@ -10,7 +10,9 @@ import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
 import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
+import cz.neumimto.towny.townycivs.mechanics.common.PowerStorageConfig;
 import cz.neumimto.towny.townycivs.model.LoadedStructure;
+import cz.neumimto.towny.townycivs.power.PowerGrid;
 import cz.neumimto.towny.townycivs.power.PowerService;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
@@ -41,8 +43,6 @@ public class StructureService {
     @Inject
     private SubclaimService subclaimService;
 
-    @Inject
-    private FoliaScheduler structureScheduler;
 
     @Inject
     private ManagementService managementService;
@@ -275,8 +275,14 @@ public class StructureService {
                 }
 
                 if (production.mechanic.id().equals("power_storage")) {
-                    DoubleWrapper config = (DoubleWrapper) production.configValue;
-                    powerService.registerPowerStorage(structure, config.value);
+                    PowerStorageConfig config = (PowerStorageConfig) production.configValue;
+
+                    // Default to 10% if not set
+                    double charge = (config.chargeRate < 0) ? config.capacity * 0.1 : config.chargeRate;
+                    double discharge = (config.dischargeRate < 0) ? config.capacity * 0.1 : config.dischargeRate;
+
+                    powerService.registerPowerStorage(structure, config.capacity, charge, discharge);
+                    isConnector = true;
                     isConnector = true;
                 }
             }
@@ -327,6 +333,15 @@ public class StructureService {
                     Town town = TownyAPI.getInstance().getTown(a.town);
                     addToTown(town, a);
                 });
+
+        PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
+
+        // Iterate through all known towns and load their power grids
+        for (com.palmergames.bukkit.towny.object.Town town : com.palmergames.bukkit.towny.TownyAPI.getInstance().getTowns()) {
+            powerService.loadTownPower(town.getUUID());
+        }
+
+        TownyCivs.logger.info("Power grids loaded.");
     }
 
     public void delete(Region region, Player player) {
@@ -336,6 +351,16 @@ public class StructureService {
         Set<LoadedStructure> loadedStructures = structuresByTown.getOrDefault(l.town, Collections.emptySet());
         loadedStructures.remove(l);
         Town town = TownyAPI.getInstance().getTown(l.town);
+
+        try {
+            cz.neumimto.towny.townycivs.power.PowerService powerService =
+                    TownyCivs.injector.getInstance(cz.neumimto.towny.townycivs.power.PowerService.class);
+            powerService.unregisterStructure(l);
+
+        } catch (Exception e) {
+            TownyCivs.logger.warning("Failed to cleanup power for structure " + l.uuid);
+            e.printStackTrace();
+        }
 
         TownyMessaging.sendPrefixedTownMessage(town, player.getName() + " deleted structure " + l.structureDef.name);
 
@@ -382,6 +407,13 @@ public class StructureService {
             subclaimService.delete(oldRegion);
         }
 
+        // Sync battery charge before switching if it's a battery
+        PowerService powerService = TownyCivs.injector.getInstance(PowerService.class);
+        PowerGrid grid = powerService.getPowerGrid(oldStructure.town);
+        if (grid != null && grid.getBatteries().containsKey(oldStructure.uuid)) {
+             oldStructure.savedBatteryCharge = grid.getBatteries().get(oldStructure.uuid).currentCharge;
+        }
+
         // Create new LoadedStructure with same UUID and location
         LoadedStructure newLoadedStructure = new LoadedStructure(
                 oldStructure.uuid,
@@ -394,6 +426,7 @@ public class StructureService {
         // Preserve state
         newLoadedStructure.editMode.set(oldStructure.editMode.get());
         newLoadedStructure.lastTickTime = oldStructure.lastTickTime;
+        newLoadedStructure.savedBatteryCharge = oldStructure.savedBatteryCharge;
 
         // Transfer inventory if new structure supports it
         if (newStructure.inventorySize > 0) {

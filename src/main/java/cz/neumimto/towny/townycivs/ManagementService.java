@@ -339,6 +339,7 @@ public class ManagementService {
             structuresBeingEdited.remove(loadedStructure.uuid);
             refreshContainerLocations(loadedStructure, region);
             loadedStructure.editMode.set(false);
+            Storage.scheduleSave(loadedStructure);
         }
     }
 

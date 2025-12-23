@@ -201,6 +201,7 @@ public class ConfigurationService {
                 s = replaceSingleLine(s, "%toco_lore_banned_biomes%", Translatable.of("toco_lore_banned_biomes").translate());
                 s = replaceSingleLine(s, "%tickrate%", String.valueOf(structure.period));
                 s = replaceSingleLine(s, "%maxcount%", String.valueOf(structure.maxCount));
+                s = replaceSingleLine(s, "%tags%", String.valueOf(structure.tags));
                 list.add(mm.deserialize(s));
             }
         }
