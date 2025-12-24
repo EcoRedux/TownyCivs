@@ -91,9 +91,6 @@ public class Structure {
     @Path("Tags")
     public List<String> tags = new ArrayList<>();
 
-    @Path("Schematic")
-    public String schematicFile;
-
     public static class Area {
         public final int x;
         public final int z;
