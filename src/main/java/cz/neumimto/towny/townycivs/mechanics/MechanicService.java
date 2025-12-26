@@ -73,6 +73,7 @@ public class MechanicService {
         prodMech(new ConditionalItemProduction()); // Conditional crafting production
         prodMech(new PowerGeneration()); // Power generation mechanic
         prodMech(new PowerStorage()); // Power storage (batteries)
+        prodMech(new Entity());
 
         // Power consumption is an upkeep requirement
         prodReq(new PowerConsumption());

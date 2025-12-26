@@ -52,6 +52,7 @@ public final class Flatfile implements IStorage {
             yaml.set(path + ".editMode", structure.editMode.get());
             yaml.set(path + ".lastTickTime", structure.lastTickTime);
             yaml.set(path + ".batteryCharge", structure.savedBatteryCharge);
+            yaml.set(path + ".toggleTitle", structure.toggleTitle.get());
 
             // Save inventories
             List<Map<String, Object>> invList = new ArrayList<>();
@@ -138,6 +139,7 @@ public final class Flatfile implements IStorage {
                     );
 
                     struct.editMode.set(yaml.getBoolean(path + ".editMode"));
+                    struct.toggleTitle.set(yaml.getBoolean(path + ".toggleTitle"));
                     struct.lastTickTime = yaml.getLong(path + ".lastTickTime");
                     struct.savedBatteryCharge = yaml.getDouble(path + ".batteryCharge", 0.0);
 

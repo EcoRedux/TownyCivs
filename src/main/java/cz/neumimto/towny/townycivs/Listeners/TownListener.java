@@ -133,10 +133,15 @@ public class TownListener implements Listener {
             // Only show title if we're entering a different region
             if (toRegion.isPresent()) {
                 // If we weren't in any region before, or we were in a different region
-                boolean shouldShowTitle = fromRegion.isEmpty() ||
-                    !fromRegion.get().uuid.equals(toRegion.get().uuid);
+                boolean shouldShowTitle = (fromRegion.isEmpty() ||
+                    !fromRegion.get().uuid.equals(toRegion.get().uuid));
 
                 if (shouldShowTitle) {
+
+                    if(toRegion.get().loadedStructure.toggleTitle.get() == false){
+                        return;
+                    }
+
                     // Use MiniMessage for better formatting and customization
                     MiniMessage miniMessage = MiniMessage.miniMessage();
                     Component structureName = miniMessage.deserialize(toRegion.get().loadedStructure.structureDef.name);

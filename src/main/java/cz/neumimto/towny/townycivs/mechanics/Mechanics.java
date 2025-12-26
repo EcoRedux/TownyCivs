@@ -22,4 +22,5 @@ public interface Mechanics {
     String POWER_GENERATION = "power_generation";
     String POWER_CONSUMPTION = "power_consumption";
     String POWER_STORAGE = "power_storage";
+    String ENTITY = "entity";
 }

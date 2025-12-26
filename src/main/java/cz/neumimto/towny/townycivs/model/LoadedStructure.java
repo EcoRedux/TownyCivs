@@ -26,6 +26,7 @@ public class LoadedStructure {
     public double savedBatteryCharge = 0.0;
 
     public final AtomicBoolean editMode;
+    public final AtomicBoolean toggleTitle;
     public final Map<Location, Inventory> inventory;
     public transient int unsavedTickCount;
     public long lastTickTime;
@@ -40,5 +41,6 @@ public class LoadedStructure {
         this.structureDef = structureDef;
         this.editMode = new AtomicBoolean(false);
         this.inventory = new HashMap<>();
+        this.toggleTitle = new AtomicBoolean(true);
     }
 }

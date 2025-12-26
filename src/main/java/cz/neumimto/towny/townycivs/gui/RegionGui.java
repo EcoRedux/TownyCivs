@@ -4,7 +4,6 @@ import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import com.palmergames.bukkit.towny.TownyAPI;
-import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.Town;
 import cz.neumimto.towny.townycivs.*;
 import cz.neumimto.towny.townycivs.config.ConfigurationService;
@@ -12,17 +11,12 @@ import cz.neumimto.towny.townycivs.config.Structure;
 import cz.neumimto.towny.townycivs.db.Storage;
 import cz.neumimto.towny.townycivs.gui.api.GuiCommand;
 import cz.neumimto.towny.townycivs.gui.api.GuiConfig;
-import cz.neumimto.towny.townycivs.mechanics.ItemUpkeep;
 import cz.neumimto.towny.townycivs.mechanics.Mechanic;
-import cz.neumimto.towny.townycivs.mechanics.Mechanics;
 import cz.neumimto.towny.townycivs.mechanics.TownContext;
-import cz.neumimto.towny.townycivs.mechanics.common.DoubleWrapper;
-import cz.neumimto.towny.townycivs.model.LoadedStructure;
 import cz.neumimto.towny.townycivs.model.Region;
 import cz.neumimto.towny.townycivs.model.StructureAndCount;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -32,6 +26,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BundleMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 
 import javax.inject.Inject;
@@ -465,6 +460,26 @@ public class RegionGui extends TCGui {
             }
         })));
 
+
+        ItemStack title = new ItemStack(Material.OAK_SIGN);
+        title.editMeta(itemMeta -> {
+            // Set glint inside editMeta
+            itemMeta.setEnchantmentGlintOverride(region.loadedStructure.toggleTitle.get());
+
+            String titleStatus = region.loadedStructure.toggleTitle.get() ? "<green>Enabled</green>" : "<red>Disabled</red>";
+            itemMeta.displayName(mm.deserialize("<gold>Title Display: </gold>" + titleStatus));
+
+            var lore = new ArrayList<Component>();
+            lore.add(mm.deserialize("<gray>Toggle structure title display when entering the structure.</gray>"));
+            itemMeta.lore(lore);
+        });
+
+        map.put("TitleToggle", List.of(new GuiCommand(title, e -> {
+            e.setCancelled(true);
+            region.loadedStructure.toggleTitle.set(!region.loadedStructure.toggleTitle.get());
+            Storage.scheduleSave(region.loadedStructure);
+            display((Player) e.getWhoClicked(), region);
+        })));
         return map;
     }
 
